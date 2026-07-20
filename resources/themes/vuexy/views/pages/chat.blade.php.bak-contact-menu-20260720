@@ -54,43 +54,6 @@
   min-block-size: 320px;
   visibility: visible !important;
 }
-.chat-contact-list-item { position: relative; }
-.chat-contact-list-item .chat-contact-actions {
-  opacity: 0;
-  pointer-events: none;
-  position: absolute;
-  inset-inline-end: .35rem;
-  inset-block-start: 50%;
-  transform: translateY(-50%);
-  z-index: 5;
-}
-.chat-contact-list-item:hover .chat-contact-actions,
-.chat-contact-list-item.active .chat-contact-actions,
-.chat-contact-list-item .chat-contact-actions.show,
-.chat-contact-list-item .chat-contact-actions:focus-within {
-  opacity: 1;
-  pointer-events: auto;
-}
-.chat-contact-list-item .chat-contact-action-btn {
-  inline-size: 2rem;
-  block-size: 2rem;
-  border: 0;
-  border-radius: 999px;
-  color: inherit;
-  background: rgba(255,255,255,.9);
-  box-shadow: 0 2px 8px rgba(15,23,42,.12);
-}
-.chat-contact-list-item.active .chat-contact-action-btn {
-  color: #fff;
-  background: rgba(255,255,255,.2);
-}
-.chat-contact-list-item .chat-contact-action-btn:hover {
-  background: rgba(255,255,255,1);
-  color: var(--bs-primary);
-}
-.chat-contact-list-item.active .chat-contact-info {
-  padding-inline-end: 2.35rem;
-}
 </style>
 @if (!session()->has('selectedDevice'))
 		<div class="card shadow-sm border-0">
@@ -232,20 +195,6 @@
 					</small>
 				  </div>
 				</a>
-				<div class="dropdown chat-contact-actions">
-				  <button class="chat-contact-action-btn d-inline-flex align-items-center justify-content-center"
-						  type="button"
-						  data-bs-toggle="dropdown"
-						  aria-expanded="false"
-						  title="{{ __('Options') }}">
-					<i class="icon-base ti tabler-dots-vertical icon-18px"></i>
-				  </button>
-				  <div class="dropdown-menu dropdown-menu-end">
-					<a class="dropdown-item chat-contact-open" href="javascript:void(0);">{{ __('Open chat') }}</a>
-					<a class="dropdown-item chat-contact-rename" href="javascript:void(0);">{{ __('Change CS Name') }}</a>
-					<a class="dropdown-item text-danger chat-contact-delete" href="javascript:void(0);">{{ __('Delete conversation') }}</a>
-				  </div>
-				</div>
 			  </li>
 			@endforeach
           </ul>
@@ -577,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <script type="module" src="{{ asset('js/emoji/picker.min.js') }}?v={{config('app.version')}}"></script>
-	<script src="{{ asset('js/app-chat.js') }}?v={{config('app.version')}}-livechat-sync-20260720h"></script>
+	<script src="{{ asset('js/app-chat.js') }}?v={{config('app.version')}}-livechat-sync-20260720f"></script>
 	<script>
 	document.addEventListener('DOMContentLoaded', function () {
 	  var chatList = document.getElementById('chat-list');
@@ -708,7 +657,6 @@ document.addEventListener('DOMContentLoaded', () => {
 	  }
 
 	  function contactFromEvent(event) {
-	    if (event.target.closest('.chat-contact-actions')) return null;
 	    return event.target.closest('li.chat-contact-list-item');
 	  }
 

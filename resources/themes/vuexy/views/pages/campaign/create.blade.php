@@ -357,12 +357,10 @@
 				const select = $('#contact_ids');
 				if (!select.length) return false;
 
-				select.find('option').each(function() {
-					if (String($(this).val()) === targetId) {
-						$(this).prop('selected', false);
-					}
-				});
+				const currentVals = select.val() || [];
+				const newVals = currentVals.map(v => String(v)).filter(v => v !== targetId);
 
+				select.val(newVals);
 				if (typeof $ !== 'undefined' && $.fn.selectpicker) {
 					select.selectpicker('refresh');
 				}
@@ -372,7 +370,7 @@
 			};
 
 			function updateSelectedContactPills() {
-				if (typeof $ === 'undefined' || !$.fn.selectpicker) return;
+				if (typeof $ === 'undefined') return;
 
 				const select = $('#contact_ids');
 				const container = $('#selected-contacts-pills');
@@ -382,40 +380,42 @@
 
 				container.empty();
 
-				const selectedOptions = select.find('option:selected');
-				const selectedCount = selectedOptions.length;
+				const selectedVals = select.val() || [];
+				const selectedCount = selectedVals.length;
 
-				// 1. Sync top right badge
+				// 1. Sync top right badge count
 				if (countEl.length) {
 					countEl.text(selectedCount + ' Kontak Terpilih');
 				}
 
-				// 2. Sync select button text explicitly so it NEVER shows wrong count
+				// 2. Sync select button text
 				const btnTextEl = $('#container_custom_contacts_selection').find('.filter-option-inner-inner, .filter-option');
 				if (btnTextEl.length) {
 					if (selectedCount > 0) {
 						btnTextEl.text(selectedCount + ' Kontak Terpilih');
 					} else {
-						btnTextEl.text('{{ __("Klik di sini untuk mencari & memilih kontak...") }}');
+						btnTextEl.text('Klik di sini untuk mencari & memilih kontak...');
 					}
 				}
 
-				// 3. Render pills
-				selectedOptions.each(function() {
-					const id = String($(this).val());
-					const fullText = $(this).text().trim();
-					const nameOnly = fullText.split('—')[0].trim();
+				// 3. Render pills from selectedVals
+				selectedVals.forEach(val => {
+					const opt = select.find(`option[value="${val}"]`);
+					if (opt.length) {
+						const fullText = opt.text().trim();
+						const nameOnly = fullText.split('—')[0].trim();
 
-					const badge = $(`
-						<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
-							<i class="ti tabler-user icon-xs"></i>
-							<span>${nameOnly}</span>
-							<span class="unselect-contact-btn cursor-pointer text-danger ms-1" onclick="return window.removeSingleContact('${id}', event);" title="Hapus kontak ini" style="display:inline-flex; align-items:center; padding: 2px 5px; background: rgba(220,53,69,0.1); border-radius: 4px;">
-								<i class="ti tabler-x icon-xs pointer-events-none"></i>
+						const badge = $(`
+							<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
+								<i class="ti tabler-user icon-xs"></i>
+								<span>${nameOnly}</span>
+								<span class="unselect-contact-btn cursor-pointer text-danger ms-1" onclick="return window.removeSingleContact('${val}', event);" title="Hapus kontak ini" style="display:inline-flex; align-items:center; padding: 2px 5px; background: rgba(220,53,69,0.1); border-radius: 4px;">
+									<i class="ti tabler-x icon-xs pointer-events-none"></i>
+								</span>
 							</span>
-						</span>
-					`);
-					container.append(badge);
+						`);
+						container.append(badge);
+					}
 				});
 			}
 

@@ -17,7 +17,6 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\DevicesController;
 use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\ChatController;
-use App\Http\Controllers\ChatMessagesController;
 use App\Http\Controllers\ChatSyncController;
 use App\Http\Controllers\AnalyticsReportController;
 use App\Http\Controllers\MessagesHistoryController;
@@ -195,7 +194,7 @@ Route::group(['prefix' => LaravelLocalization::setLocale()], function() {
 	  Route::get('/api-docs',RestapiController::class)->name('rest-api')->middleware('permissions');
 	  
 	  Route::get('/chat', [ChatController::class, 'index'])->name('chat.index')->middleware('permissions');
-	  Route::get('/chat/messages/{session}', [ChatMessagesController::class, 'index'])->name('chat.messages')->middleware('permissions');
+	  Route::get('/chat/messages/{session}', [ChatController::class, 'messages'])->name('chat.messages')->middleware('permissions');
           Route::get('/chat/sync', [ChatSyncController::class, 'index'])->name('chat.sync')->middleware('permissions');
           Route::post('/chat/mark-read/{session}', [ChatSyncController::class, 'markRead'])->name('chat.markRead')->middleware('permissions');
 	  Route::post('/chat/session/name', [ChatController::class, 'setSessionName'])->name('chat.session.setName')->middleware('permissions');

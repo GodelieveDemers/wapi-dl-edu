@@ -577,7 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <script type="module" src="{{ asset('js/emoji/picker.min.js') }}?v={{config('app.version')}}"></script>
-	<script src="{{ asset('js/app-chat.js') }}?v={{config('app.version')}}-livechat-sync-20260720h"></script>
+	<script src="{{ asset('js/app-chat.js') }}?v={{config('app.version')}}-livechat-sync-20260720g"></script>
 	<script>
 	document.addEventListener('DOMContentLoaded', function () {
 	  var chatList = document.getElementById('chat-list');

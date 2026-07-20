@@ -587,10 +587,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   }
 
-  function escapeAttr(s) {
-    return escapeHtml(s).replace(/"/g, '&quot;').replace(/'/g, '&#039;')
-  }
-
   function safeDecodeURIComponent(value) {
     try {
       return decodeURIComponent(value || '');
@@ -791,7 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  if (m.type === 'image' && m.attachment) {
 		const imgDiv = document.createElement('div');
 		imgDiv.className = 'chat-message-text mt-2';
-		imgDiv.innerHTML = `<img src="${escapeAttr(m.attachment)}" class="chat-img-preview" style="max-width:250px;border-radius:8px;cursor:pointer;">`;
+		imgDiv.innerHTML = `<img src="${m.attachment}" class="chat-img-preview" style="max-width:250px;border-radius:8px;cursor:pointer;">`;
 		insertQuoteBefore(wrapper, imgDiv, m);
 		wrapper.insertBefore(imgDiv, wrapper.querySelector('.mt-1'));
 		appendReplyIcon(imgDiv, m.id);
@@ -829,7 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  } else if (m.type === 'sticker' && m.attachment) {
 		const stickDiv = document.createElement('div');
 		stickDiv.className = 'chat-message-text mt-2';
-		stickDiv.innerHTML = `<img src="${escapeAttr(m.attachment)}" style="max-width:140px;">`;
+		stickDiv.innerHTML = `<img src="${m.attachment}" style="max-width:140px;">`;
 		insertQuoteBefore(wrapper, stickDiv, m);
 		wrapper.insertBefore(stickDiv, wrapper.querySelector('.mt-1'));
 		appendReplyIcon(stickDiv, m.id);
@@ -864,21 +860,21 @@ document.addEventListener('DOMContentLoaded', () => {
 	  } else if (m.type === 'audio' && m.attachment) {
 		const audDiv = document.createElement('div');
 		audDiv.className = 'chat-message-text mt-2';
-		audDiv.innerHTML = `<audio style="max-width:250px;border-radius:8px;" controls><source src="${escapeAttr(m.attachment)}" type="audio/ogg"></audio>`;
+		audDiv.innerHTML = `<audio style="max-width:250px;border-radius:8px;" controls><source src="${m.attachment}" type="audio/ogg"></audio>`;
 		insertQuoteBefore(wrapper, audDiv, m);
 		wrapper.insertBefore(audDiv, wrapper.querySelector('.mt-1'));
 		appendReplyIcon(audDiv, m.id);
 	  } else if (m.type === 'video' && m.attachment) {
 		const vidDiv = document.createElement('div');
 		vidDiv.className = 'chat-message-text mt-2';
-		vidDiv.innerHTML = `<video style="width:100%;max-width:250px;border-radius:8px;" controls><source src="${escapeAttr(m.attachment)}" type="video/mp4"></video>`;
+		vidDiv.innerHTML = `<video style="width:100%;max-width:250px;border-radius:8px;" controls><source src="${m.attachment}" type="video/mp4"></video>`;
 		insertQuoteBefore(wrapper, vidDiv, m);
 		wrapper.insertBefore(vidDiv, wrapper.querySelector('.mt-1'));
 		appendReplyIcon(vidDiv, m.id);
 	  } else if (m.type === 'document' && m.attachment) {
 		const docDiv = document.createElement('div');
 		docDiv.className = 'chat-message-text mt-2';
-		docDiv.innerHTML = `<a href="${escapeAttr(m.attachment)}" download><i class="icon-base ti tabler-file-type-doc icon-22px" style="max-width:250px;border-radius:8px;"></i> ${escapeHtml(m.original_file || 'Document')}</a>`;
+		docDiv.innerHTML = `<a href="${m.attachment}" download><i class="icon-base ti tabler-file-type-doc icon-22px" style="max-width:250px;border-radius:8px;"></i> ${m.original_file || ''}</a>`;
 		insertQuoteBefore(wrapper, docDiv, m);
 		wrapper.insertBefore(docDiv, wrapper.querySelector('.mt-1'));
 		appendReplyIcon(docDiv, m.id);
@@ -900,9 +896,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let contentHtml;
     const baseTime = `${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     if (m.type === 'image' && m.attachment) {
-      contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><img src="${escapeAttr(m.attachment)}" style="max-width:250px;border-radius:8px;cursor:pointer;" data-bs-toggle="modal" data-bs-target="#imageModal" data-bs-src="${escapeAttr(m.attachment)}" /></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
+      contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><img src="${m.attachment}" style="max-width:250px;border-radius:8px;cursor:pointer;" data-bs-toggle="modal" data-bs-target="#imageModal" data-bs-src="${m.attachment}" /></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
     } else if (m.type === 'sticker' && m.attachment) {
-	  contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><img src="${escapeAttr(m.attachment)}" style="max-width:140px;"></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
+	  contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><img src="${m.attachment}" style="max-width:140px;"></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
 	} else if (m.type === 'location') {
       const loc = safeParseJson(m.attachment, {});
       const lat = loc.degreesLatitude || loc.latitude;
@@ -915,9 +911,9 @@ document.addEventListener('DOMContentLoaded', () => {
         contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><a href="${mapUrl}" target="_blank"><iframe src="${embedSrc}" width="200" height="150" style="border:0;border-radius:8px;"></iframe></a></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
       }
     } else if (m.type === 'audio' && m.attachment) {
-      contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><audio style="max-width:250px;border-radius:8px;" controls><source src="${escapeAttr(m.attachment)}" type="audio/ogg"></audio></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
+      contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><audio style="max-width:250px;border-radius:8px;" controls><source src="${m.attachment}" type="audio/ogg"></audio></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
     } else if (m.type === 'video' && m.attachment) {
-      contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><video style="max-width:250px;border-radius:8px;" controls><source src="${escapeAttr(m.attachment)}" type="video/mp4"></video></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
+      contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><video style="max-width:250px;border-radius:8px;" controls><source src="${m.attachment}" type="video/mp4"></video></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
     } else if (m.type === 'vcard') {
       const vraw = safeDecodeURIComponent(m.message)
       const lines = vraw.split('\n')
@@ -925,7 +921,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const telLine = (lines.find(l => l.startsWith('TEL')) || '').split(':')[1] || ''
       contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text p-2 border rounded" style="cursor: pointer;background-color: #f5ecb9;" data-vcard="${encodeURIComponent(vraw)}" data-download="${fnLine || 'contact'}"><i class="icon-base ti tabler-user icon-22px me-2"></i><strong>${fnLine}</strong><br><small>${telLine}</small></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
     } else if (m.type === 'document' && m.attachment) {
-      contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><a href="${escapeAttr(m.attachment)}" download><i class="icon-base ti tabler-file-type-doc icon-22px" style="max-width:250px;border-radius:8px;"></i> ${escapeHtml(m.original_file || 'Document')}</a></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
+      contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><a href="${m.attachment}" download><i class="icon-base ti tabler-file-type-doc icon-22px" style="max-width:250px;border-radius:8px;"></i> ${m.original_file || ''}</a></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1"><small>${baseTime}</small></div></div>`;
     } else {
       contentHtml = `<div class="chat-message-wrapper flex-grow-1"><div class="chat-message-text"><p class="mb-0" style="white-space: break-spaces;">${formatWppMarkdown(m.message)}</p></div><div class="${isIncoming ? 'text-body-secondary' : 'text-end'} mt-1">${!isIncoming ? '<i class="icon-base ti tabler-checks icon-16px text-success me-1"></i>' : ''}<small>${baseTime}</small></div></div>`;
     }
