@@ -2,12 +2,6 @@
 
 const esc = value => String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-const normalizePhone = value => {
-  let digits = String(value ?? '').replace(/\D+/g, '');
-  if (digits.startsWith('0')) digits = '62' + digits.slice(1);
-  return digits;
-};
-
 const messageTextFromPayload = payload => {
   if (typeof payload === 'string') return payload;
   if (!payload || typeof payload !== 'object') return '';
@@ -52,7 +46,7 @@ const syncOutgoingMessage = async ({
 
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const body = esc(sender);
-  const phone = esc(normalizePhone(receiver));
+  const phone = esc(receiver);
   const text = esc(normalizeMessageText(message));
   const safeType = esc(type || 'text');
   const safeMessageId = messageId ? esc(messageId) : null;

@@ -9,15 +9,6 @@ use Illuminate\Http\Request;
 
 class ChatSyncController extends Controller
 {
-    private function normalizePhone(?string $value): string
-    {
-        $digits = preg_replace('/\D+/', '', (string) $value);
-        if (str_starts_with($digits, '0')) {
-            return '62' . substr($digits, 1);
-        }
-        return $digits;
-    }
-
     public function index(Request $request)
     {
         $user = $request->user();
@@ -30,7 +21,6 @@ class ChatSyncController extends Controller
             ->where('user_id', $user->id)
             ->when($deviceBody, fn ($query) => $query->where('body', $deviceBody))
             ->withCount([
-                'messages',
                 'messages as unread_count' => function ($query) {
                     $query->where('direction', 'incoming')
                         ->where(function ($query) {
@@ -42,19 +32,11 @@ class ChatSyncController extends Controller
             ->orderByDesc('updated_at')
             ->limit(100);
 
-        $sessions = $sessionsQuery->get()
-            ->groupBy(fn (ChatSession $session) => $session->body . '|' . $this->normalizePhone($session->phone_number))
-            ->map(function ($group) {
-                return $group->sortByDesc(function (ChatSession $session) {
-                    return [(int) ($session->messages_count ?? 0), $session->updated_at?->timestamp ?? 0, $session->id];
-                })->first();
-            })
-            ->values()
-            ->map(function (ChatSession $session) {
+        $sessions = $sessionsQuery->get()->map(function (ChatSession $session) {
             return [
                 'id' => $session->id,
                 'body' => $session->body,
-                'phone_number' => $this->normalizePhone($session->phone_number) ?: $session->phone_number,
+                'phone_number' => $session->phone_number,
                 'push_name' => $session->push_name,
                 'cs_name' => $session->cs_name,
                 'profile_sender' => $session->profile_sender,

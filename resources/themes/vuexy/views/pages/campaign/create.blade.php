@@ -343,100 +343,69 @@
 						$('#phonebook_id').selectpicker('refresh');
 						$('#contact_ids').selectpicker('refresh');
 					}
+					if (isCustom) updateSelectedContactPills();
 				});
 			});
 
-			let isUpdatingPills = false;
-
 			function updateSelectedContactPills() {
-				if (isUpdatingPills) return;
-				isUpdatingPills = true;
+				if (typeof $ === 'undefined' || !$.fn.selectpicker) return;
 
-				try {
-					const selectEl = document.getElementById('contact_ids');
-					const container = document.getElementById('selected-contacts-pills');
-					const countEl = document.getElementById('selected-contacts-count');
+				const select = $('#contact_ids');
+				const container = $('#selected-contacts-pills');
+				const countEl = $('#selected-contacts-count');
 
-					if (!selectEl || !container) {
-						isUpdatingPills = false;
-						return;
-					}
+				if (!select.length || !container.length) return;
 
-					container.innerHTML = '';
+				container.empty();
 
-					const selectedOptions = [];
-					for (let i = 0; i < selectEl.options.length; i++) {
-						if (selectEl.options[i].selected) {
-							selectedOptions.push(selectEl.options[i]);
-						}
-					}
+				const selectedOptions = select.find('option:selected');
+				const selectedCount = selectedOptions.length;
 
-					const count = selectedOptions.length;
-					if (countEl) {
-						countEl.textContent = count + ' Kontak Terpilih';
-					}
+				if (countEl.length) {
+					countEl.text(selectedCount + ' Kontak Terpilih');
+				}
 
-					selectedOptions.forEach(opt => {
-						const id = opt.value;
-						const text = opt.text.trim();
-						const nameOnly = text.split('—')[0].trim();
+				selectedOptions.each(function() {
+					const id = String($(this).val());
+					const fullText = $(this).text().trim();
+					const nameOnly = fullText.split('—')[0].trim();
 
-						const badge = document.createElement('span');
-						badge.className = 'badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle';
-						badge.style.fontSize = '0.82rem';
-
-						badge.innerHTML = `
+					const badge = $(`
+						<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
 							<i class="ti tabler-user icon-xs"></i>
 							<span>${nameOnly}</span>
 							<span class="unselect-contact-btn cursor-pointer text-danger ms-1" data-id="${id}" title="Hapus kontak ini" style="display:inline-flex; align-items:center; padding: 0 4px;">
 								<i class="ti tabler-x icon-xs pointer-events-none"></i>
 							</span>
-						`;
-						container.appendChild(badge);
-					});
-				} catch (err) {
-					console.error('Error updating pills:', err);
-				} finally {
-					isUpdatingPills = false;
-				}
-			}
-
-			if (typeof $ !== 'undefined') {
-				$(document).off('changed.bs.select', '#contact_ids').on('changed.bs.select', '#contact_ids', function () {
-					updateSelectedContactPills();
+						</span>
+					`);
+					container.append(badge);
 				});
 			}
 
-			// Capture phase click handler to intercept click before Bootstrap-Select or form handlers
-			document.addEventListener('click', function (e) {
-				const btn = e.target.closest('.unselect-contact-btn');
-				if (!btn) return;
+			if (typeof $ !== 'undefined') {
+				$(document).on('changed.bs.select', '#contact_ids', function () {
+					updateSelectedContactPills();
+				});
 
-				e.preventDefault();
-				e.stopPropagation();
-				e.stopImmediatePropagation();
+				$(document).on('click', '.unselect-contact-btn', function (e) {
+					e.preventDefault();
+					e.stopPropagation();
 
-				const id = btn.getAttribute('data-id');
-				const selectEl = document.getElementById('contact_ids');
+					const btn = $(this);
+					const targetId = String(btn.attr('data-id') || btn.data('id'));
+					const select = $('#contact_ids');
+					const currentVals = select.val() || [];
+					
+					// Filter out targetId using strict string comparison
+					const newVals = currentVals.map(v => String(v)).filter(v => v !== targetId);
 
-				if (selectEl && id) {
-					let changed = false;
-					for (let i = 0; i < selectEl.options.length; i++) {
-						if (String(selectEl.options[i].value) === String(id)) {
-							selectEl.options[i].selected = false;
-							changed = true;
-							break;
-						}
-					}
-
-					if (changed) {
-						if (typeof $ !== 'undefined' && $.fn.selectpicker) {
-							$('#contact_ids').selectpicker('refresh');
-						}
-						updateSelectedContactPills();
-					}
-				}
-			}, true);
+					// Update selectpicker value and refresh Bootstrap-Select UI
+					select.val(newVals);
+					select.selectpicker('refresh');
+					updateSelectedContactPills();
+				});
+			}
 			
 			// Handle message source change
 			document.querySelectorAll('input[name="message_source"]').forEach(radio => {
