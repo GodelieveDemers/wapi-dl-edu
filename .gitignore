@@ -37,3 +37,4 @@ true,
 sendMedia|*
 sendText|*
 |access_scope|*
+!database/database_backup_wapi.sql
