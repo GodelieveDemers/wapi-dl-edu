@@ -193,6 +193,9 @@
 										@endif
 									</select>
 
+									<!-- Clean Pills Container for Selected Contacts -->
+									<div id="selected-contacts-pills" class="d-flex flex-wrap gap-1 mt-2"></div>
+
 									<small class="text-muted mt-2 d-block fs-tiny"><i class="ti tabler-info-circle icon-xs me-1"></i> {{ __('Ketikkan nama atau nomor HP pada pencarian di atas untuk memfilter kontak secara cepat.') }}</small>
 								</div>
 							</div>
@@ -343,11 +346,59 @@
 				});
 			});
 
+			function updateSelectedContactPills() {
+				if (typeof $ === 'undefined') return;
+
+				const select = $('#contact_ids');
+				const container = $('#selected-contacts-pills');
+				const countEl = $('#selected-contacts-count');
+
+				if (!select.length || !container.length) return;
+
+				container.empty();
+
+				const selectedVals = select.val() || [];
+				const selectedCount = selectedVals.length;
+
+				if (countEl.length) {
+					countEl.text(selectedCount + ' Kontak Terpilih');
+				}
+
+				selectedVals.forEach(val => {
+					const opt = select.find(`option[value="${val}"]`);
+					if (opt.length) {
+						const fullText = opt.text().trim();
+						const nameOnly = fullText.split('—')[0].trim();
+
+						const badge = $(`
+							<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
+								<i class="ti tabler-user icon-xs"></i>
+								<span>${nameOnly}</span>
+								<span class="remove-pill-btn cursor-pointer text-danger ms-1" data-val="${val}" title="Hapus kontak ini" style="display:inline-flex; align-items:center; padding: 1px 4px; background: rgba(220,53,69,0.1); border-radius: 4px;">
+									<i class="ti tabler-x icon-xs pointer-events-none"></i>
+								</span>
+							</span>
+						`);
+						container.append(badge);
+					}
+				});
+			}
+
 			if (typeof $ !== 'undefined') {
 				$(document).on('changed.bs.select', '#contact_ids', function () {
-					const selectedCount = $(this).val() ? $(this).val().length : 0;
-					const countEl = document.getElementById('selected-contacts-count');
-					if (countEl) countEl.textContent = selectedCount + ' Kontak Terpilih';
+					updateSelectedContactPills();
+				});
+
+				$(document).on('click', '.remove-pill-btn', function (e) {
+					e.preventDefault();
+					e.stopPropagation();
+
+					const valToRemove = String($(this).data('val') || $(this).attr('data-val'));
+					const select = $('#contact_ids');
+					const currentVals = (select.val() || []).map(v => String(v));
+					const newVals = currentVals.filter(v => v !== valToRemove);
+
+					select.val(newVals).selectpicker('refresh');
 				});
 			}
 			
