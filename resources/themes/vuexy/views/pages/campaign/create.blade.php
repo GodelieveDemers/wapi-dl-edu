@@ -349,67 +349,94 @@
 			let isUpdatingPills = false;
 
 			function updateSelectedContactPills() {
-				if (isUpdatingPills || typeof $ === 'undefined') return;
+				if (isUpdatingPills) return;
 				isUpdatingPills = true;
 
-				const select = $('#contact_ids');
-				const container = $('#selected-contacts-pills');
-				const countEl = document.getElementById('selected-contacts-count');
-				
-				if (!container.length) {
-					isUpdatingPills = false;
-					return;
-				}
+				try {
+					const selectEl = document.getElementById('contact_ids');
+					const container = document.getElementById('selected-contacts-pills');
+					const countEl = document.getElementById('selected-contacts-count');
 
-				container.empty();
+					if (!selectEl || !container) {
+						isUpdatingPills = false;
+						return;
+					}
 
-				const selectedOptions = select.find('option:selected');
-				const selectedCount = selectedOptions.length;
+					container.innerHTML = '';
 
-				if (countEl) {
-					countEl.textContent = selectedCount + ' Kontak Terpilih';
-				}
+					const selectedOptions = [];
+					for (let i = 0; i < selectEl.options.length; i++) {
+						if (selectEl.options[i].selected) {
+							selectedOptions.push(selectEl.options[i]);
+						}
+					}
 
-				selectedOptions.each(function() {
-					const id = String($(this).val());
-					const fullText = $(this).text().trim();
-					const nameOnly = fullText.split('—')[0].trim();
+					const count = selectedOptions.length;
+					if (countEl) {
+						countEl.textContent = count + ' Kontak Terpilih';
+					}
 
-					const badge = $(`
-						<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
+					selectedOptions.forEach(opt => {
+						const id = opt.value;
+						const text = opt.text.trim();
+						const nameOnly = text.split('—')[0].trim();
+
+						const badge = document.createElement('span');
+						badge.className = 'badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle';
+						badge.style.fontSize = '0.82rem';
+
+						badge.innerHTML = `
 							<i class="ti tabler-user icon-xs"></i>
 							<span>${nameOnly}</span>
-							<span class="unselect-contact-btn cursor-pointer text-danger ms-1" data-id="${id}" title="Hapus kontak ini" style="display:inline-block; padding: 0 2px;">
+							<span class="unselect-contact-btn cursor-pointer text-danger ms-1" data-id="${id}" title="Hapus kontak ini" style="display:inline-flex; align-items:center; padding: 0 4px;">
 								<i class="ti tabler-x icon-xs pointer-events-none"></i>
 							</span>
-						</span>
-					`);
-					container.append(badge);
-				});
-
-				isUpdatingPills = false;
+						`;
+						container.appendChild(badge);
+					});
+				} catch (err) {
+					console.error('Error updating pills:', err);
+				} finally {
+					isUpdatingPills = false;
+				}
 			}
 
 			if (typeof $ !== 'undefined') {
 				$(document).off('changed.bs.select', '#contact_ids').on('changed.bs.select', '#contact_ids', function () {
 					updateSelectedContactPills();
 				});
-
-				$(document).off('click', '.unselect-contact-btn').on('click', '.unselect-contact-btn', function (e) {
-					e.preventDefault();
-					e.stopPropagation();
-					
-					const btn = $(e.target).closest('.unselect-contact-btn');
-					const id = String(btn.attr('data-id') || btn.data('id'));
-					const select = $('#contact_ids');
-					const currentVals = (select.val() || []).map(v => String(v));
-					const newVals = currentVals.filter(v => v !== id);
-					
-					select.val(newVals);
-					select.selectpicker('refresh');
-					select.trigger('change');
-				});
 			}
+
+			// Capture phase click handler to intercept click before Bootstrap-Select or form handlers
+			document.addEventListener('click', function (e) {
+				const btn = e.target.closest('.unselect-contact-btn');
+				if (!btn) return;
+
+				e.preventDefault();
+				e.stopPropagation();
+				e.stopImmediatePropagation();
+
+				const id = btn.getAttribute('data-id');
+				const selectEl = document.getElementById('contact_ids');
+
+				if (selectEl && id) {
+					let changed = false;
+					for (let i = 0; i < selectEl.options.length; i++) {
+						if (String(selectEl.options[i].value) === String(id)) {
+							selectEl.options[i].selected = false;
+							changed = true;
+							break;
+						}
+					}
+
+					if (changed) {
+						if (typeof $ !== 'undefined' && $.fn.selectpicker) {
+							$('#contact_ids').selectpicker('refresh');
+						}
+						updateSelectedContactPills();
+					}
+				}
+			}, true);
 			
 			// Handle message source change
 			document.querySelectorAll('input[name="message_source"]').forEach(radio => {
