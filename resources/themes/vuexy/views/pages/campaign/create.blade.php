@@ -385,10 +385,22 @@
 				const selectedOptions = select.find('option:selected');
 				const selectedCount = selectedOptions.length;
 
+				// 1. Sync top right badge
 				if (countEl.length) {
 					countEl.text(selectedCount + ' Kontak Terpilih');
 				}
 
+				// 2. Sync select button text explicitly so it NEVER shows wrong count
+				const btnTextEl = $('#container_custom_contacts_selection').find('.filter-option-inner-inner, .filter-option');
+				if (btnTextEl.length) {
+					if (selectedCount > 0) {
+						btnTextEl.text(selectedCount + ' Kontak Terpilih');
+					} else {
+						btnTextEl.text('{{ __("Klik di sini untuk mencari & memilih kontak...") }}');
+					}
+				}
+
+				// 3. Render pills
 				selectedOptions.each(function() {
 					const id = String($(this).val());
 					const fullText = $(this).text().trim();
