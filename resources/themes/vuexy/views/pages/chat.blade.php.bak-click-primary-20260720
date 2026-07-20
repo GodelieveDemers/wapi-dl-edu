@@ -526,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <script type="module" src="{{ asset('js/emoji/picker.min.js') }}?v={{config('app.version')}}"></script>
-	<script src="{{ asset('js/app-chat.js') }}?v={{config('app.version')}}-livechat-sync-20260720f"></script>
+	<script src="{{ asset('js/app-chat.js') }}?v={{config('app.version')}}-livechat-sync-20260720e"></script>
 	<script>
 	document.addEventListener('DOMContentLoaded', function () {
 	  var chatList = document.getElementById('chat-list');
@@ -630,13 +630,6 @@ document.addEventListener('DOMContentLoaded', () => {
 	    var name = item.dataset.pushName || item.dataset.sessionPhone || 'Chat';
 	    var phone = item.dataset.sessionPhone || '';
 	    var fallback = item.dataset.lastMessage || (item.querySelector('.chat-contact-status') ? item.querySelector('.chat-contact-status').textContent.trim() : '');
-	    window.currentSessionId = sessionId || null;
-	    window.currentSessionBody = item.dataset.sessionBody || '';
-	    window.currentSessionPhone = phone;
-	    window.currentSessionName = name;
-	    window.currentCsName = item.dataset.csName || '';
-	    window.currentProfileSender = item.dataset.profileSender || '';
-	    window.currentProfileReceive = item.dataset.profileReceive || '';
 
 	    chatList.querySelectorAll('li.chat-contact-list-item').forEach(function (row) { row.classList.remove('active'); });
 	    item.classList.add('active');
@@ -662,19 +655,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	  chatList.addEventListener('pointerdown', function (event) {
 	    var item = contactFromEvent(event);
-	    if (item) {
-	      event.preventDefault();
-	      openContact(item);
-	    }
+	    if (item) openContact(item);
 	  }, true);
 
 	  chatList.addEventListener('click', function (event) {
 	    var item = contactFromEvent(event);
-	    if (item) {
-	      event.preventDefault();
-	      event.stopImmediatePropagation();
-	      openContact(item);
-	    }
+	    if (item) openContact(item);
 	  }, true);
 	});
 	</script>

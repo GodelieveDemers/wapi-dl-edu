@@ -346,11 +346,21 @@
 				});
 			});
 
+			let isUpdatingPills = false;
+
 			function updateSelectedContactPills() {
-				if (typeof $ === 'undefined') return;
+				if (isUpdatingPills || typeof $ === 'undefined') return;
+				isUpdatingPills = true;
+
 				const select = $('#contact_ids');
 				const container = $('#selected-contacts-pills');
 				const countEl = document.getElementById('selected-contacts-count');
+				
+				if (!container.length) {
+					isUpdatingPills = false;
+					return;
+				}
+
 				container.empty();
 
 				const selectedOptions = select.find('option:selected');
@@ -361,7 +371,7 @@
 				}
 
 				selectedOptions.each(function() {
-					const id = $(this).val();
+					const id = String($(this).val());
 					const fullText = $(this).text().trim();
 					const nameOnly = fullText.split('—')[0].trim();
 
@@ -369,27 +379,35 @@
 						<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
 							<i class="ti tabler-user icon-xs"></i>
 							<span>${nameOnly}</span>
-							<i class="ti tabler-x icon-xs ms-1 cursor-pointer text-danger unselect-contact-btn" data-id="${id}" title="Hapus kontak ini"></i>
+							<span class="unselect-contact-btn cursor-pointer text-danger ms-1" data-id="${id}" title="Hapus kontak ini" style="display:inline-block; padding: 0 2px;">
+								<i class="ti tabler-x icon-xs pointer-events-none"></i>
+							</span>
 						</span>
 					`);
 					container.append(badge);
 				});
+
+				isUpdatingPills = false;
 			}
 
 			if (typeof $ !== 'undefined') {
-				$(document).on('changed.bs.select', '#contact_ids', function () {
+				$(document).off('changed.bs.select', '#contact_ids').on('changed.bs.select', '#contact_ids', function () {
 					updateSelectedContactPills();
 				});
 
-				$(document).on('click', '.unselect-contact-btn', function (e) {
+				$(document).off('click', '.unselect-contact-btn').on('click', '.unselect-contact-btn', function (e) {
+					e.preventDefault();
 					e.stopPropagation();
-					const id = $(this).data('id');
+					
+					const btn = $(e.target).closest('.unselect-contact-btn');
+					const id = String(btn.attr('data-id') || btn.data('id'));
 					const select = $('#contact_ids');
-					const currentVals = select.val() || [];
-					const newVals = currentVals.filter(v => v != id);
+					const currentVals = (select.val() || []).map(v => String(v));
+					const newVals = currentVals.filter(v => v !== id);
+					
 					select.val(newVals);
 					select.selectpicker('refresh');
-					updateSelectedContactPills();
+					select.trigger('change');
 				});
 			}
 			
