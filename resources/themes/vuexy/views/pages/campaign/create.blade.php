@@ -181,9 +181,9 @@
 										data-actions-box="true" 
 										data-style="btn-outline-primary" 
 										data-dropup-auto="false" 
-										data-selected-text-format="count > 0" 
+										data-selected-text-format="count > 2" 
 										data-count-selected-text="{0} Kontak Terpilih"
-										title="{{ __('Klik di sini untuk mencari & memilih kontak...') }}">
+										title="{{ __('Ketik nama atau nomor HP kontak tersimpan...') }}">
 										@if(isset($contacts) && count($contacts) > 0)
 											@foreach ($contacts as $contact)
 											<option value="{{ $contact->id }}" data-tokens="{{ strtolower($contact->name) }} {{ $contact->number }} {{ $contact->tag ? strtolower($contact->tag->name) : '' }}">
@@ -192,9 +192,6 @@
 											@endforeach
 										@endif
 									</select>
-
-									<!-- Clean Pills Container for Selected Contacts -->
-									<div id="selected-contacts-pills" class="d-flex flex-wrap gap-1 mt-2"></div>
 
 									<small class="text-muted mt-2 d-block fs-tiny"><i class="ti tabler-info-circle icon-xs me-1"></i> {{ __('Ketikkan nama atau nomor HP pada pencarian di atas untuk memfilter kontak secara cepat.') }}</small>
 								</div>
@@ -343,85 +340,14 @@
 						$('#phonebook_id').selectpicker('refresh');
 						$('#contact_ids').selectpicker('refresh');
 					}
-					if (isCustom) updateSelectedContactPills();
 				});
 			});
 
-			window.removeSingleContact = function(id, e) {
-				if (e) {
-					e.preventDefault();
-					e.stopPropagation();
-					if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-				}
-				const targetId = String(id);
-				const select = $('#contact_ids');
-				if (!select.length) return false;
-
-				const currentVals = select.val() || [];
-				const newVals = currentVals.map(v => String(v)).filter(v => v !== targetId);
-
-				select.val(newVals);
-				if (typeof $ !== 'undefined' && $.fn.selectpicker) {
-					select.selectpicker('refresh');
-				}
-
-				updateSelectedContactPills();
-				return false;
-			};
-
-			function updateSelectedContactPills() {
-				if (typeof $ === 'undefined') return;
-
-				const select = $('#contact_ids');
-				const container = $('#selected-contacts-pills');
-				const countEl = $('#selected-contacts-count');
-
-				if (!select.length || !container.length) return;
-
-				container.empty();
-
-				const selectedVals = select.val() || [];
-				const selectedCount = selectedVals.length;
-
-				// 1. Sync top right badge count
-				if (countEl.length) {
-					countEl.text(selectedCount + ' Kontak Terpilih');
-				}
-
-				// 2. Sync select button text
-				const btnTextEl = $('#container_custom_contacts_selection').find('.filter-option-inner-inner, .filter-option');
-				if (btnTextEl.length) {
-					if (selectedCount > 0) {
-						btnTextEl.text(selectedCount + ' Kontak Terpilih');
-					} else {
-						btnTextEl.text('Klik di sini untuk mencari & memilih kontak...');
-					}
-				}
-
-				// 3. Render pills from selectedVals
-				selectedVals.forEach(val => {
-					const opt = select.find(`option[value="${val}"]`);
-					if (opt.length) {
-						const fullText = opt.text().trim();
-						const nameOnly = fullText.split('—')[0].trim();
-
-						const badge = $(`
-							<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
-								<i class="ti tabler-user icon-xs"></i>
-								<span>${nameOnly}</span>
-								<span class="unselect-contact-btn cursor-pointer text-danger ms-1" onclick="return window.removeSingleContact('${val}', event);" title="Hapus kontak ini" style="display:inline-flex; align-items:center; padding: 2px 5px; background: rgba(220,53,69,0.1); border-radius: 4px;">
-									<i class="ti tabler-x icon-xs pointer-events-none"></i>
-								</span>
-							</span>
-						`);
-						container.append(badge);
-					}
-				});
-			}
-
 			if (typeof $ !== 'undefined') {
 				$(document).on('changed.bs.select', '#contact_ids', function () {
-					updateSelectedContactPills();
+					const selectedCount = $(this).val() ? $(this).val().length : 0;
+					const countEl = document.getElementById('selected-contacts-count');
+					if (countEl) countEl.textContent = selectedCount + ' Kontak Terpilih';
 				});
 			}
 			
