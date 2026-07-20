@@ -347,6 +347,30 @@
 				});
 			});
 
+			window.removeSingleContact = function(id, e) {
+				if (e) {
+					e.preventDefault();
+					e.stopPropagation();
+					if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+				}
+				const targetId = String(id);
+				const select = $('#contact_ids');
+				if (!select.length) return false;
+
+				select.find('option').each(function() {
+					if (String($(this).val()) === targetId) {
+						$(this).prop('selected', false);
+					}
+				});
+
+				if (typeof $ !== 'undefined' && $.fn.selectpicker) {
+					select.selectpicker('refresh');
+				}
+
+				updateSelectedContactPills();
+				return false;
+			};
+
 			function updateSelectedContactPills() {
 				if (typeof $ === 'undefined' || !$.fn.selectpicker) return;
 
@@ -374,7 +398,7 @@
 						<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
 							<i class="ti tabler-user icon-xs"></i>
 							<span>${nameOnly}</span>
-							<span class="unselect-contact-btn cursor-pointer text-danger ms-1" data-id="${id}" title="Hapus kontak ini" style="display:inline-flex; align-items:center; padding: 0 4px;">
+							<span class="unselect-contact-btn cursor-pointer text-danger ms-1" onclick="return window.removeSingleContact('${id}', event);" title="Hapus kontak ini" style="display:inline-flex; align-items:center; padding: 2px 5px; background: rgba(220,53,69,0.1); border-radius: 4px;">
 								<i class="ti tabler-x icon-xs pointer-events-none"></i>
 							</span>
 						</span>
@@ -385,24 +409,6 @@
 
 			if (typeof $ !== 'undefined') {
 				$(document).on('changed.bs.select', '#contact_ids', function () {
-					updateSelectedContactPills();
-				});
-
-				$(document).on('click', '.unselect-contact-btn', function (e) {
-					e.preventDefault();
-					e.stopPropagation();
-
-					const btn = $(this);
-					const targetId = String(btn.attr('data-id') || btn.data('id'));
-					const select = $('#contact_ids');
-					const currentVals = select.val() || [];
-					
-					// Filter out targetId using strict string comparison
-					const newVals = currentVals.map(v => String(v)).filter(v => v !== targetId);
-
-					// Update selectpicker value and refresh Bootstrap-Select UI
-					select.val(newVals);
-					select.selectpicker('refresh');
 					updateSelectedContactPills();
 				});
 			}
