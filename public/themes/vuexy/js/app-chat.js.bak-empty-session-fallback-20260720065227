@@ -218,7 +218,6 @@ document.addEventListener('DOMContentLoaded', () => {
     contact.dataset.profileReceive = data.profile_receive || '';
     contact.dataset.stopAi = String(data.stop_ai || 0);
     contact.dataset.csName = data.cs_name || '';
-    contact.dataset.lastMessage = data.last_message || '';
     contact.querySelector('.chat-contact-name').textContent = finalName;
     contact.querySelector('.chat-contact-status').textContent = contactDisplayMessage(data.last_message);
     contact.querySelector('.chat-contact-list-item-time').textContent = getRelativeTime(data.updated_at);
@@ -625,31 +624,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ul.innerHTML = `<li class="text-center text-body-secondary py-4">${escapeHtml(text)}</li>`;
     psChatHistory?.update();
   }
-
-  function showLastMessageFallback(lastMessage) {
-    if (!lastMessage || !String(lastMessage).trim()) {
-      showChatNotice('Belum ada riwayat pesan yang tersinkron.');
-      return;
-    }
-    const fallback = normalizeMessage({
-      id: `fallback-${window.currentSessionId || Date.now()}`,
-      direction: 'incoming',
-      type: 'text',
-      message: String(lastMessage),
-      created_at: new Date().toISOString(),
-      phone_number: window.currentSessionPhone || ''
-    });
-    messageStore.clear();
-    const ul = document.getElementById('messages-list');
-    if (!ul) return;
-    ul.innerHTML = `
-      <li class="text-center text-body-secondary py-2 small">
-        Riwayat detail belum tersinkron, menampilkan pesan terakhir.
-      </li>`;
-    ul.appendChild(createLi(fallback));
-    psChatHistory?.update();
-    scrollToBottom();
-  }
   
   function resolveQuoted(m){
 	  const rid = Number(m.reply_message_id || 0);
@@ -986,7 +960,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const sessionCsName  = li.dataset.csName || '';
       const profileSender = li.dataset.profileSender || '';
       const profileReceive = li.dataset.profileReceive || '';
-      const lastMessage = li.dataset.lastMessage || li.querySelector('.chat-contact-status')?.textContent?.trim() || '';
 
       switchToChatConversation();
       showChatNotice('Memuat chat...');
@@ -1024,12 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
       socket.emit('join-session', { sessionId });
       fetch(FetchUrl.replace(':id', encodeURIComponent(sessionId)))
         .then(r => r.ok ? r.json() : Promise.reject())
-        .then(messages => {
-          if (Array.isArray(messages) && messages.length > 0) renderMessages(messages);
-          else showLastMessageFallback(lastMessage);
-          markSessionRead(sessionId);
-          syncLiveChat();
-        })
+        .then(messages => { renderMessages(messages); markSessionRead(sessionId); syncLiveChat(); })
         .catch(function(){
           showChatNotice('Gagal memuat isi chat. Silakan refresh halaman.');
           if (typeof notyf !== 'undefined') notyf.error('Gagal memuat isi chat. Silakan coba refresh.');
@@ -1074,7 +1042,6 @@ document.addEventListener('DOMContentLoaded', () => {
       contact.dataset.pushName = data.push_name || '';
       contact.querySelector('.chat-contact-name').textContent = nameOrPhone;
       contact.querySelector('.chat-contact-status').textContent = data.message;
-      contact.dataset.lastMessage = data.message || '';
       contact.querySelector('.chat-contact-list-item-time').textContent = NowLang;
       if (typeof data.profile_sender !== 'undefined') {
         const old = contact.dataset.profileSender || ''
@@ -1133,7 +1100,6 @@ document.addEventListener('DOMContentLoaded', () => {
       contact.querySelector('.chat-contact-name').textContent = finalName;
       contact.querySelector('.chat-contact-status').textContent =
         typeof Lang !== 'undefined' && Lang[data.last_message] ? Lang[data.last_message] : data.last_message;
-      contact.dataset.lastMessage = data.last_message || '';
       contact.querySelector('.chat-contact-list-item-time').textContent = getRelativeTime(data.updated_at);
       if (typeof data.profile_sender !== 'undefined') {
         const old = contact.dataset.profileSender || ''
@@ -1154,7 +1120,6 @@ document.addEventListener('DOMContentLoaded', () => {
       li.dataset.pushName     = finalName;
       li.dataset.profileSender = data.profile_sender || '';
       li.dataset.profileReceive = data.profile_receive || '';
-      li.dataset.lastMessage = data.last_message || '';
       li.innerHTML = `
         <a class="d-flex align-items-center">
           <div class="flex-shrink-0 avatar">
