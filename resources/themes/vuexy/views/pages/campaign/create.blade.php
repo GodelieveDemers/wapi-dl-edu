@@ -171,11 +171,19 @@
 
 								<!-- Container 2: Select Specific Contacts (Searchable Multi-Select) -->
 								<div id="container_custom_contacts_selection" class="destination-container d-none">
-									<label class="form-label mb-1 d-flex justify-content-between align-items-center">
-										<span>{{ __('Pilih Nomor HP Tersimpan (Searchable)') }}</span>
-										<span class="badge bg-label-info" id="selected-contacts-count">0 kontak terpilih</span>
+									<label class="form-label mb-2 d-flex justify-content-between align-items-center">
+										<span class="fw-semibold text-body"><i class="ti tabler-search me-1 text-primary"></i>{{ __('Pilih Nomor HP Tersimpan') }}</span>
+										<span class="badge bg-label-primary fs-tiny" id="selected-contacts-count">0 Kontak Terpilih</span>
 									</label>
-									<select id="contact_ids" name="contact_ids[]" class="selectpicker w-100" multiple data-live-search="true" data-actions-box="true" data-style="btn-outline-success" data-dropup-auto="false" data-selected-text-format="count > 2" title="{{ __('Ketik nama atau nomor HP kontak tersimpan...') }}">
+
+									<select id="contact_ids" name="contact_ids[]" class="selectpicker w-100" multiple 
+										data-live-search="true" 
+										data-actions-box="true" 
+										data-style="btn-outline-primary" 
+										data-dropup-auto="false" 
+										data-selected-text-format="count > 0" 
+										data-count-selected-text="{0} Kontak Terpilih"
+										title="{{ __('Klik di sini untuk mencari & memilih kontak...') }}">
 										@if(isset($contacts) && count($contacts) > 0)
 											@foreach ($contacts as $contact)
 											<option value="{{ $contact->id }}" data-tokens="{{ strtolower($contact->name) }} {{ $contact->number }} {{ $contact->tag ? strtolower($contact->tag->name) : '' }}">
@@ -184,7 +192,11 @@
 											@endforeach
 										@endif
 									</select>
-									<small class="text-muted mt-1 d-block"><i class="ti tabler-info-circle icon-xs me-1"></i> {{ __('Ketikkan nama atau nomor HP pada pencarian di atas untuk memfilter kontak secara instan.') }}</small>
+
+									<!-- Clean Pills Container for Selected Contacts -->
+									<div id="selected-contacts-pills" class="d-flex flex-wrap gap-1 mt-2"></div>
+
+									<small class="text-muted mt-2 d-block fs-tiny"><i class="ti tabler-info-circle icon-xs me-1"></i> {{ __('Ketikkan nama atau nomor HP pada pencarian di atas untuk memfilter kontak secara cepat.') }}</small>
 								</div>
 							</div>
 							<div class="form-group">
@@ -334,11 +346,50 @@
 				});
 			});
 
+			function updateSelectedContactPills() {
+				if (typeof $ === 'undefined') return;
+				const select = $('#contact_ids');
+				const container = $('#selected-contacts-pills');
+				const countEl = document.getElementById('selected-contacts-count');
+				container.empty();
+
+				const selectedOptions = select.find('option:selected');
+				const selectedCount = selectedOptions.length;
+
+				if (countEl) {
+					countEl.textContent = selectedCount + ' Kontak Terpilih';
+				}
+
+				selectedOptions.each(function() {
+					const id = $(this).val();
+					const fullText = $(this).text().trim();
+					const nameOnly = fullText.split('—')[0].trim();
+
+					const badge = $(`
+						<span class="badge bg-label-primary d-inline-flex align-items-center gap-1 py-1 px-2 me-1 mb-1 border border-primary-subtle" style="font-size: 0.82rem;">
+							<i class="ti tabler-user icon-xs"></i>
+							<span>${nameOnly}</span>
+							<i class="ti tabler-x icon-xs ms-1 cursor-pointer text-danger unselect-contact-btn" data-id="${id}" title="Hapus kontak ini"></i>
+						</span>
+					`);
+					container.append(badge);
+				});
+			}
+
 			if (typeof $ !== 'undefined') {
 				$(document).on('changed.bs.select', '#contact_ids', function () {
-					const selectedCount = $(this).val() ? $(this).val().length : 0;
-					const countEl = document.getElementById('selected-contacts-count');
-					if (countEl) countEl.textContent = selectedCount + ' kontak terpilih';
+					updateSelectedContactPills();
+				});
+
+				$(document).on('click', '.unselect-contact-btn', function (e) {
+					e.stopPropagation();
+					const id = $(this).data('id');
+					const select = $('#contact_ids');
+					const currentVals = select.val() || [];
+					const newVals = currentVals.filter(v => v != id);
+					select.val(newVals);
+					select.selectpicker('refresh');
+					updateSelectedContactPills();
 				});
 			}
 			

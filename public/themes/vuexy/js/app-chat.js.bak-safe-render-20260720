@@ -437,20 +437,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function debounce(func, wait) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => func(...a), wait); }; }
 
   const switchToChatConversation = () => {
-    if (elements.appChatConversation) {
-      elements.appChatConversation.classList.remove('d-flex', 'd-block', 'show', 'active');
-      elements.appChatConversation.classList.add('d-none');
-      elements.appChatConversation.classList.add('force-hidden');
-      elements.appChatConversation.style.display = 'none';
-    }
-    if (elements.appChatHistory) {
-      elements.appChatHistory.classList.remove('d-none');
-      elements.appChatHistory.classList.add('d-block');
-      elements.appChatHistory.classList.add('force-visible');
-      elements.appChatHistory.style.display = 'block';
-      elements.appChatHistory.style.visibility = 'visible';
-      elements.appChatHistory.style.opacity = '1';
-    }
+    elements.appChatConversation.classList.replace('d-flex', 'd-none');
+    elements.appChatHistory.classList.replace('d-none', 'd-block');
   };
 
   const filterChatContacts = (selector, value, placeholder) => {
@@ -572,7 +560,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderMessages(messages) {
     const ul = document.getElementById('messages-list');
-    if (!ul) return;
     ul.innerHTML = '';
     messageStore.clear()
     let lastDirection = null;
@@ -594,34 +581,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (e) {
         const fallback = { ...m, type: 'text', message: m.message || m.original_file || m.type || '' };
-        lastLi = createSafeTextLi(fallback);
+        lastLi = createLi(fallback);
         ul.appendChild(lastLi);
         lastDirection = fallback.direction;
       }
     });
-    if (!ul.children.length) {
-      showChatNotice('Belum ada riwayat pesan yang tersinkron.');
-      return;
-    }
     psChatHistory?.update();
     scrollToBottom();
-  }
-
-  function createSafeTextLi(m) {
-    const msg = normalizeMessage(m);
-    const outgoing = msg.direction === 'outgoing';
-    const li = document.createElement('li');
-    li.className = outgoing ? 'chat-message chat-message-right' : 'chat-message';
-    li.dataset.direction = msg.direction;
-    const time = new Date(msg.created_at);
-    const shownTime = isNaN(time.getTime()) ? new Date() : time;
-    li.innerHTML =
-      `<div class="d-flex overflow-hidden">` +
-      `<div class="chat-message-wrapper flex-grow-1">` +
-      `<div class="chat-message-text"><p class="mb-0" style="white-space: break-spaces;">${escapeHtml(msg.message || msg.original_file || msg.type || '')}</p></div>` +
-      `<div class="${outgoing ? 'text-end' : 'text-body-secondary'} mt-1"><small>${shownTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></div>` +
-      `</div></div>`;
-    return li;
   }
 
   function createLi(m){
@@ -646,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (e) {
       const fallback = { ...m, type: 'text', message: m.message || m.original_file || m.type || '' };
-      const newLi = createSafeTextLi(fallback);
+      const newLi = createLi(fallback);
       ul.appendChild(newLi);
     }
     psChatHistory?.update();
@@ -680,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <li class="text-center text-body-secondary py-2 small">
         Riwayat detail belum tersinkron, menampilkan pesan terakhir.
       </li>`;
-    ul.appendChild(createSafeTextLi(fallback));
+    ul.appendChild(createLi(fallback));
     psChatHistory?.update();
     scrollToBottom();
   }
