@@ -1,0 +1,512 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Device;
+use App\Models\User;
+use App\Services\Impl\WhatsappServiceImpl;
+use App\Utils\CacheKey;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
+
+class EsmsPanelController extends Controller
+{
+    public function devices(Request $request): Response
+    {
+        $payload = $this->verifiedPayload($request);
+
+        if (! $payload) {
+            return response()
+                ->view('esms-panel.invalid', [], 403)
+                ->withHeaders($this->frameHeaders());
+        }
+
+        $isManager = $this->payloadAllowsAllDevices($payload);
+        $deviceNumber = $payload['device'] ?? null;
+        $user = $this->userForPayload($payload);
+
+        if (! $user && $deviceNumber) {
+            $user = Device::query()
+                ->where('body', $deviceNumber)
+                ->with('user')
+                ->first()
+                ?->user;
+        }
+
+        if (! $user && ! $isManager) {
+            return response()
+                ->view('esms-panel.invalid', [
+                    'message' => 'User atau nomor WAPI untuk akses ini belum tersedia.',
+                ], 404)
+                ->withHeaders($this->frameHeaders());
+        }
+
+        $devices = Device::query()
+            ->with('user')
+            ->when($user, fn ($query) => $query->where('user_id', $user->getKey()))
+            ->when(! $user && ! $isManager, fn ($query) => $query->whereRaw('1 = 0'))
+            ->when($deviceNumber, fn ($query, $device) => $query->where('body', $device))
+            ->latest()
+            ->limit($isManager && ! $deviceNumber ? 100 : 25)
+            ->get();
+
+        return response()
+            ->view('esms-panel.devices', [
+                'devices' => $devices,
+                'payload' => $payload,
+                'accessEmail' => $payload['email'],
+                'user' => $user,
+                'isManager' => $isManager,
+                'actionUrl' => $this->signedPanelUrl($request, '/esms-panel/devices/action'),
+                'storeUrl' => $this->signedPanelUrl($request, '/esms-panel/devices/store'),
+            ])
+            ->withHeaders($this->frameHeaders());
+    }
+
+    public function syncDevices(Request $request)
+    {
+        $payload = $this->verifiedPayload($request);
+
+        if (! $payload) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Akses sinkronisasi WAPI tidak valid.',
+            ], 403);
+        }
+
+        $devices = $this->devicesForPayload($payload)
+            ->map(fn (Device $device): array => [
+                'id' => $device->getKey(),
+                'sender' => (string) $device->body,
+                'status' => (string) $device->status,
+                'api_token' => (string) $device->api_token,
+                'owner_email' => strtolower((string) $device->user?->email),
+                'owner_name' => (string) ($device->user?->username ?: $device->user?->email),
+                'updated_at' => optional($device->updated_at)->toISOString(),
+            ])
+            ->values();
+
+        return response()->json([
+            'ok' => true,
+            'devices' => $devices,
+        ])->withHeaders([
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'X-Robots-Tag' => 'noindex, nofollow',
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse|Response|JsonResponse
+    {
+        $payload = $this->verifiedPayload($request);
+
+        if (! $payload) {
+            return response()
+                ->view('esms-panel.invalid', [], 403)
+                ->withHeaders($this->frameHeaders());
+        }
+
+        $validated = $request->validate([
+            'sender' => ['required', 'digits_between:8,15', 'unique:devices,body'],
+            'webhook' => ['nullable', 'url', 'max:255'],
+            'owner_user_id' => ['nullable', 'integer'],
+        ]);
+
+        $sender = preg_replace('/\D+/', '', (string) $validated['sender']);
+
+        $owner = $this->ownerForNewDevice($payload, $validated['owner_user_id'] ?? null);
+
+        if (! $owner) {
+            return response()
+                ->view('esms-panel.invalid', [
+                    'message' => 'Pemilik device WAPI belum valid.',
+                ], 403)
+                ->withHeaders($this->frameHeaders());
+        }
+
+        $device = $owner->devices()->create([
+            'body' => $sender,
+            'webhook' => $validated['webhook'] ?? null,
+            'api_token' => Device::generateApiToken(),
+        ]);
+
+        File::deleteDirectory(base_path('credentials/'.$device->body));
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'message' => 'Device WAPI '.$device->body.' berhasil ditambahkan.',
+                'device' => [
+                    'id' => $device->getKey(),
+                    'sender' => (string) $device->body,
+                    'status' => (string) $device->status,
+                    'api_token' => (string) $device->api_token,
+                    'owner_email' => strtolower((string) $owner->email),
+                    'owner_name' => (string) ($owner->username ?: $owner->email),
+                    'updated_at' => optional($device->updated_at)->toISOString(),
+                ],
+            ], 201)->withHeaders([
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                'X-Robots-Tag' => 'noindex, nofollow',
+            ]);
+        }
+
+        return redirect()
+            ->to($this->signedPanelUrl($request, '/esms-panel/devices'))
+            ->with('panel_status', 'Device WAPI '.$device->body.' berhasil ditambahkan.');
+    }
+
+    public function scan(Request $request, Device $device): Response
+    {
+        $payload = $this->verifiedPayload($request);
+
+        if (! $payload || ! $this->canAccessDevice($payload, $device)) {
+            return response()
+                ->view('esms-panel.invalid', [], 403)
+                ->withHeaders($this->frameHeaders());
+        }
+
+        return response()
+            ->view('esms-panel.scan', [
+                'device' => $device->loadMissing('user'),
+                'payload' => $payload,
+                'isManager' => ($payload['role'] ?? '') === 'manager',
+                'backUrl' => $this->signedPanelUrl($request, '/esms-panel/devices'),
+                'serverType' => env('TYPE_SERVER', 'hosting'),
+                'waUrlServer' => env('WA_URL_SERVER', ''),
+            ])
+            ->withHeaders($this->frameHeaders());
+    }
+
+    public function code(Request $request, Device $device): Response
+    {
+        $payload = $this->verifiedPayload($request);
+
+        if (! $payload || ! $this->canAccessDevice($payload, $device)) {
+            return response()
+                ->view('esms-panel.invalid', [], 403)
+                ->withHeaders($this->frameHeaders());
+        }
+
+        return response()
+            ->view('esms-panel.code', [
+                'device' => $device->loadMissing('user'),
+                'payload' => $payload,
+                'isManager' => ($payload['role'] ?? '') === 'manager',
+                'backUrl' => $this->signedPanelUrl($request, '/esms-panel/devices'),
+                'serverType' => env('TYPE_SERVER', 'hosting'),
+                'waUrlServer' => env('WA_URL_SERVER', ''),
+            ])
+            ->withHeaders($this->frameHeaders());
+    }
+
+    public function action(Request $request): RedirectResponse|Response
+    {
+        $payload = $this->verifiedPayload($request);
+
+        if (! $payload) {
+            return response()
+                ->view('esms-panel.invalid', [], 403)
+                ->withHeaders($this->frameHeaders());
+        }
+
+        $validated = $request->validate([
+            'device_id' => ['required', 'integer'],
+            'action' => ['required', 'in:disconnect,update,regenerate_token,delete,options'],
+            'webhook' => ['nullable', 'url', 'max:255'],
+            'delay' => ['nullable', 'numeric', 'min:0', 'max:3600'],
+            'webhook_full' => ['nullable', 'boolean'],
+            'webhook_read' => ['nullable', 'boolean'],
+            'webhook_reject_call' => ['nullable', 'boolean'],
+            'webhook_typing' => ['nullable', 'boolean'],
+            'set_available' => ['nullable', 'boolean'],
+        ]);
+
+        $device = Device::query()->with('user')->find($validated['device_id']);
+
+        if (! $device || ! $this->canAccessDevice($payload, $device)) {
+            return response()
+                ->view('esms-panel.invalid', [
+                    'message' => 'Anda tidak punya akses ke perangkat WAPI ini.',
+                ], 403)
+                ->withHeaders($this->frameHeaders());
+        }
+
+        try {
+            if ($validated['action'] === 'disconnect') {
+                if ($device->status === 'Connected') {
+                    (new WhatsappServiceImpl())->logoutDevice($device->body);
+                }
+
+                Cache::forget(CacheKey::DEVICE_BY_BODY.$device->body);
+                Cache::forget(CacheKey::DEVICE_BY_ID.$device->id);
+
+                return redirect()
+                    ->to($this->signedPanelUrl($request, '/esms-panel/devices'))
+                    ->with('panel_status', 'Perintah diskonek dikirim untuk '.$device->body.'. Klik Refresh jika status belum berubah.');
+            }
+
+            if ($validated['action'] === 'update') {
+                $device->forceFill([
+                    'webhook' => $validated['webhook'] ?? null,
+                ])->save();
+
+                Cache::forget(CacheKey::DEVICE_BY_BODY.$device->body);
+                Cache::forget(CacheKey::DEVICE_BY_ID.$device->id);
+
+                return redirect()
+                    ->to($this->signedPanelUrl($request, '/esms-panel/devices'))
+                    ->with('panel_status', 'Webhook device '.$device->body.' berhasil diperbarui.');
+            }
+
+            if ($validated['action'] === 'options') {
+                $device->forceFill([
+                    'webhook_full' => $request->boolean('webhook_full'),
+                    'webhook_read' => $request->boolean('webhook_read'),
+                    'webhook_reject_call' => $request->boolean('webhook_reject_call'),
+                    'webhook_typing' => $request->boolean('webhook_typing'),
+                    'set_available' => $request->boolean('set_available'),
+                    'delay' => $validated['delay'] ?? 0,
+                ])->save();
+
+                Cache::forget(CacheKey::DEVICE_BY_BODY.$device->body);
+                Cache::forget(CacheKey::DEVICE_BY_ID.$device->id);
+
+                return redirect()
+                    ->to($this->signedPanelUrl($request, '/esms-panel/devices'))
+                    ->with('panel_status', 'Options device '.$device->body.' berhasil diperbarui.');
+            }
+
+            if ($validated['action'] === 'regenerate_token') {
+                $device->update([
+                    'api_token' => Device::generateApiToken(),
+                ]);
+
+                Cache::forget(CacheKey::DEVICE_BY_BODY.$device->body);
+                Cache::forget(CacheKey::DEVICE_BY_ID.$device->id);
+
+                return redirect()
+                    ->to($this->signedPanelUrl($request, '/esms-panel/devices'))
+                    ->with('panel_status', 'Token API device '.$device->body.' berhasil dibuat ulang.');
+            }
+
+            if ($validated['action'] === 'delete') {
+                if ($device->status === 'Connected') {
+                    return redirect()
+                        ->to($this->signedPanelUrl($request, '/esms-panel/devices'))
+                        ->with('panel_error', 'Device '.$device->body.' masih Connected. Diskonek dulu sebelum menghapus.');
+                }
+
+                File::deleteDirectory(base_path('credentials/'.$device->body));
+                Cache::forget(CacheKey::DEVICE_BY_BODY.$device->body);
+                Cache::forget(CacheKey::DEVICE_BY_ID.$device->id);
+                $device->delete();
+
+                return redirect()
+                    ->to($this->signedPanelUrl($request, '/esms-panel/devices'))
+                    ->with('panel_status', 'Device WAPI '.$device->body.' berhasil dihapus.');
+            }
+        } catch (\Throwable $exception) {
+            return redirect()
+                ->to($this->signedPanelUrl($request, '/esms-panel/devices'))
+                ->with('panel_error', 'Gagal memproses aksi WAPI: '.$exception->getMessage());
+        }
+
+        return redirect()->to($this->signedPanelUrl($request, '/esms-panel/devices'));
+    }
+
+    private function verifiedPayload(Request $request): ?array
+    {
+        $secret = trim((string) env('ESMS_WAPI_SSO_SECRET', ''));
+
+        if ($secret === '') {
+            return null;
+        }
+
+        $payload = $request->query();
+        $signature = (string) ($payload['signature'] ?? '');
+        unset($payload['signature']);
+
+        foreach (['app', 'aud', 'esms_user_id', 'email', 'iat', 'exp', 'nonce'] as $required) {
+            if (blank($payload[$required] ?? null)) {
+                return null;
+            }
+        }
+
+        if ((int) $payload['exp'] < now()->timestamp || (int) $payload['iat'] > now()->addMinute()->timestamp) {
+            return null;
+        }
+
+        $host = $request->getHost();
+
+        if (! hash_equals((string) $payload['aud'], $host)) {
+            return null;
+        }
+
+        ksort($payload);
+        $canonical = http_build_query($payload, '', '&', PHP_QUERY_RFC3986);
+        $expectedSignature = hash_hmac('sha256', $canonical, $secret);
+        $rawCanonical = $this->rawCanonicalQueryWithoutSignature($request);
+        $rawExpectedSignature = $rawCanonical
+            ? hash_hmac('sha256', $rawCanonical, $secret)
+            : null;
+
+        if (
+            ! hash_equals($expectedSignature, $signature)
+            && (! $rawExpectedSignature || ! hash_equals($rawExpectedSignature, $signature))
+        ) {
+            return null;
+        }
+
+        $payload['email'] = strtolower((string) $payload['email']);
+        $payload['device'] = preg_replace('/\D+/', '', (string) ($payload['device'] ?? '')) ?: null;
+
+        return $payload;
+    }
+
+    private function rawCanonicalQueryWithoutSignature(Request $request): ?string
+    {
+        $rawQuery = (string) $request->server('QUERY_STRING', '');
+
+        if ($rawQuery === '') {
+            return null;
+        }
+
+        $parts = array_values(array_filter(
+            explode('&', $rawQuery),
+            fn (string $part) => ! str_starts_with($part, 'signature=')
+        ));
+
+        return $parts ? implode('&', $parts) : null;
+    }
+
+    private function payloadAllowsAllDevices(array $payload): bool
+    {
+        return ($payload['role'] ?? '') === 'manager'
+            && ($payload['access_scope'] ?? '') === 'all_devices';
+    }
+    private function userForPayload(array $payload): ?User
+    {
+        $email = strtolower(trim((string) ($payload['email'] ?? '')));
+
+        if ($email === '') {
+            return null;
+        }
+
+        $user = User::query()->where('email', $email)->first();
+
+        if ($user || $this->payloadAllowsAllDevices($payload)) {
+            return $user;
+        }
+
+        return User::query()->create([
+            'username' => trim((string) ($payload['name'] ?? '')) ?: strtok($email, '@') ?: $email,
+            'email' => $email,
+            'password' => bcrypt(
+                \Illuminate\Support\Str::random(48)
+            ),
+            'api_key' => \Illuminate\Support\Str::random(40),
+            'chunk_blast' => 0,
+            'level' => 'user',
+            'status' => 'active',
+            'limit_device' => 10,
+            'active_subscription' => 'lifetime',
+            'subscription_expired' => null,
+            'plan_name' => 'e-SMS',
+            'plan_data' => [
+                'api' => true,
+                'send_message' => true,
+                'send_media' => true,
+                'messages_limit' => -1,
+            ],
+            'timezone' => 'Asia/Jakarta',
+        ]);
+    }
+    private function canAccessDevice(array $payload, Device $device): bool
+    {
+        if ($this->payloadAllowsAllDevices($payload)) {
+            return true;
+        }
+
+        if (! empty($payload['device'])) {
+            return (string) $device->body === (string) $payload['device'];
+        }
+
+        return strtolower((string) $device->user?->email) === strtolower((string) ($payload['email'] ?? ''));
+    }
+
+    private function devicesForPayload(array $payload)
+    {
+        $isManager = $this->payloadAllowsAllDevices($payload);
+        $deviceNumber = $payload['device'] ?? null;
+        $user = $this->userForPayload($payload);
+
+        if (! $user && $deviceNumber) {
+            $user = Device::query()
+                ->where('body', $deviceNumber)
+                ->with('user')
+                ->first()
+                ?->user;
+        }
+
+        return Device::query()
+            ->with('user')
+            ->when($user, fn ($query) => $query->where('user_id', $user->getKey()))
+            ->when(! $user && ! $isManager, fn ($query) => $query->whereRaw('1 = 0'))
+            ->when($deviceNumber, fn ($query, $device) => $query->where('body', $device))
+            ->latest()
+            ->limit($isManager && ! $deviceNumber ? 100 : 25)
+            ->get();
+    }
+
+    private function ownerForNewDevice(array $payload, ?int $ownerUserId): ?User
+    {
+        if ($this->payloadAllowsAllDevices($payload)) {
+            if ($ownerUserId) {
+                return User::query()->find($ownerUserId);
+            }
+
+            return User::query()->where('email', $payload['email'])->first();
+        }
+
+        if (($payload['role'] ?? '') === 'manager') {
+            return User::query()->where('email', $payload['email'])->first();
+        }
+
+        return User::query()->where('email', $payload['email'])->first();
+    }
+
+    private function signedPanelUrl(Request $request, string $path): string
+    {
+        $locale = $request->segment(1) ?: app()->getLocale() ?: 'en';
+        $query = (string) $request->server('QUERY_STRING', '');
+
+        return $request->getSchemeAndHttpHost().'/'.$locale.$path.($query !== '' ? '?'.$query : '');
+    }
+
+    private function frameHeaders(): array
+    {
+        $allowedOrigins = collect(preg_split('/[\r\n,]+/', (string) env('ESMS_ALLOWED_FRAME_ANCESTORS', '')) ?: [])
+            ->map(fn (string $origin): string => rtrim(trim($origin), '/'))
+            ->filter(fn (string $origin): bool => preg_match('#^https?://[a-z0-9.-]+(?::[0-9]+)?$#i', $origin) === 1)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($allowedOrigins === []) {
+            $allowedOrigins = [
+                'https://esms.dl-edu.my.id',
+                'https://e-sms.dl-edu.my.id',
+                'https://e-sms.vpntunnel.my.id',
+            ];
+        }
+
+        return [
+            'Content-Security-Policy' => "frame-ancestors 'self' http://127.0.0.1:8000 http://localhost:8000 ".implode(' ', $allowedOrigins).";",
+            'X-Robots-Tag' => 'noindex, nofollow',
+        ];
+    }
+}

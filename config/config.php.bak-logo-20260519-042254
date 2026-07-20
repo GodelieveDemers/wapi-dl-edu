@@ -1,0 +1,10 @@
+<?php
+
+return [
+    /****************ONLY CHANGE THIS****************/
+    'site_name' => env('MPWA_SITE_NAME', 'MPWA Multi device version'),
+	'header_side' => env('MPWA_HEADER_SIDE', 'MPWA v'.config('app.version')),
+	'footer_name' => env('MPWA_FOOTER_NAME', 'MPWA'),
+	'footer_copyright' => 'Made with ❤️ by Magd',
+	/************************************************/
+];

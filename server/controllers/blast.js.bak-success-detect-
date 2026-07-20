@@ -1,0 +1,322 @@
+import { dbQuery } from '../database/index.js';
+import { normalizeMessageText, syncOutgoingMessage } from './outgoingSync.js';
+import { formatReceipt } from '../lib/helper.js';
+import * as wa from '../whatsapp.js';
+
+const campaignQueues = new Map()
+const MAX_CONSECUTIVE_REJECTIONS = 1
+const MAX_RETRIES_AFTER_463 = 1
+const MAX_EXISTENCE_CHECK_RETRIES = 3
+const RETRY_AFTER_463_DELAY_MS = 15000
+const RETRY_AFTER_EXISTENCE_ERROR_MS = 10000
+
+const scheduleCampaignExecution = (campaignId, task) => {
+  const previous = campaignQueues.get(campaignId) ?? Promise.resolve()
+  const hasRunningJob = campaignQueues.has(campaignId)
+
+  const nextJob = previous
+    .catch(() => {})
+    .then(task)
+    .catch(error => {
+      console.error(`Failed to process campaign ${campaignId}:`, error)
+    })
+    .finally(() => {
+      if (campaignQueues.get(campaignId) === nextJob) {
+        campaignQueues.delete(campaignId)
+      }
+    })
+
+  campaignQueues.set(campaignId, nextJob)
+
+  return !hasRunningJob
+}
+
+const updateStatus = async (campaignId, receiver, status) => {
+  await dbQuery(
+    "UPDATE blasts SET status = '" +
+      status +
+      "' WHERE receiver = '" +
+      receiver +
+      "' AND campaign_id = '" +
+      campaignId +
+      "'"
+  )
+}
+
+const pauseCampaign = async campaignId => {
+  await dbQuery(
+    "UPDATE campaigns SET status = 'paused' WHERE id = '" +
+      campaignId +
+      "' AND status IN ('pending', 'processing')"
+  )
+}
+
+const isWhatsAppRejection = error => {
+  const statusCode = error?.output?.statusCode || error?.statusCode
+  return statusCode === 463 || error?.message?.includes('463')
+}
+
+const isCampaignActive = async campaignId => {
+  const result = await dbQuery(
+    "SELECT status FROM campaigns WHERE id = '" +
+      campaignId +
+      "' LIMIT 1"
+  )
+
+  return result.length > 0 && ['pending', 'processing'].includes(result[0].status)
+}
+
+const checkBlast = async (campaignId, receiver) => {
+  const result = await dbQuery(
+    "SELECT status FROM blasts WHERE receiver = '" +
+      receiver +
+      "' AND campaign_id = '" +
+      campaignId +
+      "'"
+  )
+  return result.length > 0 && result[0].status === 'pending'
+}
+
+
+const extractBlastMessageText = item => normalizeMessageText(item.message)
+
+const syncOutgoingBlast = async (parsedData, item, status, sendResult) => {
+  return syncOutgoingMessage({
+    sender: parsedData.sender,
+    receiver: item.receiver,
+    message: item.message,
+    type: parsedData.type || 'text',
+    status,
+    note: 'campaign blast',
+    messageId: sendResult?.key?.id,
+    insertHistory: true,
+  })
+}
+
+const sendBlastMessage = async (req, res) => {
+  let parsedData
+
+  try {
+    parsedData = JSON.parse(req.body.data)
+  } catch (error) {
+    return res.status(400).send({ status: false, message: 'Invalid payload' })
+  }
+
+  const { campaign_id: campaignId, data: messageData } = parsedData || {}
+
+  if (!campaignId) {
+    return res.status(400).send({ status: false, message: 'Missing campaign identifier' })
+  }
+
+  if (!Array.isArray(messageData) || messageData.length === 0) {
+    return res.send({ status: 'in_progress', queued: false, processed: 0 })
+  }
+
+      const processCampaign = async () => {
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+        let consecutiveWhatsAppRejections = 0
+        const whatsAppRejectionRetries = new Map()
+        const existenceCheckRetries = new Map()
+
+    const parsedMinDelay = Number(parsedData.delay)
+    const minDelay = Number.isFinite(parsedMinDelay) ? Math.max(0, parsedMinDelay) : 0
+    const parsedMaxDelay = Number(parsedData.delay_max)
+    const maxDelay = Number.isFinite(parsedMaxDelay) ? Math.max(minDelay, parsedMaxDelay) : minDelay
+
+      for (let index = 0; index < messageData.length; index++) {
+        const item = messageData[index]
+
+        if (!item) {
+          continue
+        }
+
+        if (!(await isCampaignActive(campaignId))) {
+          break
+        }
+
+      const shouldDelay = maxDelay > 0 || minDelay > 0
+      if (shouldDelay) {
+        const delayRange = maxDelay > minDelay ? maxDelay - minDelay + 1 : 1
+        const delaySec = maxDelay > minDelay
+          ? Math.floor(Math.random() * delayRange) + minDelay
+          : minDelay
+          if (delaySec > 0) {
+            await delay(delaySec * 1000)
+          }
+        }
+
+        if (!(await isCampaignActive(campaignId))) {
+          break
+        }
+
+      if (!parsedData.sender || !item.receiver || !item.message) {
+        continue
+      }
+
+      const blastStillPending = await checkBlast(campaignId, item.receiver)
+      if (!blastStillPending) {
+        continue
+      }
+
+        try {
+          const exists = await wa.isExist(parsedData.sender, formatReceipt(item.receiver))
+          if (!exists) {
+            console.warn(`Campaign ${campaignId} skipped receiver ${item.receiver}: number not found on WhatsApp`)
+            await updateStatus(campaignId, item.receiver, 'failed')
+            continue
+          }
+        } catch (existsError) {
+          const retryCount = existenceCheckRetries.get(item.receiver) || 0
+          console.warn(`Campaign ${campaignId} failed WhatsApp existence check for ${item.receiver}:`, existsError)
+          if (retryCount < MAX_EXISTENCE_CHECK_RETRIES) {
+            existenceCheckRetries.set(item.receiver, retryCount + 1)
+            await delay(RETRY_AFTER_EXISTENCE_ERROR_MS)
+            index--
+            continue
+          }
+
+          await pauseCampaign(campaignId)
+          console.warn(`Campaign ${campaignId} paused because WhatsApp connection stayed unstable during existence checks`)
+          break
+        }
+
+      try {
+        let sendResult
+
+        if (parsedData.type === 'media') {
+          const mediaMessage = JSON.parse(item.message)
+          if (mediaMessage.caption && mediaMessage.caption.trim() !== '') {
+            if (mediaMessage.footer && mediaMessage.footer.trim() !== '') {
+              mediaMessage.caption = `${mediaMessage.caption}\n\n> _${mediaMessage.footer}_`
+              delete mediaMessage.footer
+            }
+          } else if (mediaMessage.footer && mediaMessage.footer.trim() !== '') {
+            mediaMessage.caption = `> _${mediaMessage.footer}_`
+            delete mediaMessage.footer
+          }
+          sendResult = await wa.sendMedia(
+            parsedData.sender,
+            item.receiver,
+            mediaMessage.type,
+            mediaMessage.url,
+            mediaMessage.caption,
+            0,
+            mediaMessage.viewonce,
+            mediaMessage.filename
+          )
+        } else if (parsedData.type === 'sticker') {
+          const stickerMessage = JSON.parse(item.message)
+          sendResult = await wa.sendSticker(
+            parsedData.sender,
+            item.receiver,
+            stickerMessage.type,
+            stickerMessage.url,
+            stickerMessage.filename
+          )
+        } else if (parsedData.type === 'button') {
+          const buttonData = JSON.parse(item.message)
+          const buttons = buttonData.buttons.map(buttonRawData => {
+            const raw = buttonRawData.buttonText?.displayText || {}
+            return {
+              type: raw.type || 'reply',
+              displayText: raw.displayText,
+              id: buttonRawData.buttonId,
+              phoneNumber: raw.phoneNumber,
+              url: raw.url,
+              copyCode: raw.copyCode
+            }
+          })
+          sendResult = await wa.sendButtonMessage(
+            parsedData.sender,
+            item.receiver,
+            buttons,
+            buttonData.caption || buttonData.text || '',
+            buttonData.footer,
+            buttonData.image?.url
+          )
+        } else if (parsedData.type === 'list') {
+          const listData = JSON.parse(item.message)
+          sendResult = await wa.sendListMessage(
+            parsedData.sender,
+            item.receiver,
+            listData.sections,
+            listData.text || listData.caption || '',
+            listData.footer || '',
+            listData.title || '',
+            listData.buttonText || 'Select',
+            '',
+            listData.image?.url || null
+          )
+        } else {
+          const msg = JSON.parse(item.message)
+          if (msg.text && msg.footer && msg.text.trim() !== '') {
+            msg.text = wa.randomizeText(`${msg.text}\n\n> _${msg.footer}_`)
+            delete msg.footer
+          } else if (msg.text) {
+            msg.text = wa.randomizeText(msg.text)
+          }
+
+          if (msg.text && Object.keys(msg).every(key => ['text'].includes(key))) {
+            sendResult = await wa.sendText(
+              parsedData.sender,
+              item.receiver,
+              '',
+              msg.text
+            )
+          } else {
+            sendResult = await wa.sendMessage(
+              parsedData.sender,
+              item.receiver,
+              msg
+            )
+          }
+        }
+
+          const status = sendResult ? 'success' : 'failed'
+          await updateStatus(campaignId, item.receiver, status)
+          if (status === 'success') {
+            consecutiveWhatsAppRejections = 0
+            await syncOutgoingBlast(parsedData, item, status, sendResult)
+          }
+        } catch (sendError) {
+          if (sendError?.message?.includes('503')) {
+            await delay(5000)
+            index--
+          } else {
+            if (isWhatsAppRejection(sendError)) {
+              const retryCount = whatsAppRejectionRetries.get(item.receiver) || 0
+              if (retryCount < MAX_RETRIES_AFTER_463) {
+                whatsAppRejectionRetries.set(item.receiver, retryCount + 1)
+                console.warn(
+                  `Campaign ${campaignId} received WhatsApp 463 for ${item.receiver}; retrying once after token recovery`
+                )
+                await delay(RETRY_AFTER_463_DELAY_MS)
+                index--
+                continue
+              }
+
+              await updateStatus(campaignId, item.receiver, 'failed')
+              consecutiveWhatsAppRejections++
+              console.warn(
+                `Campaign ${campaignId} paused after ${consecutiveWhatsAppRejections} consecutive WhatsApp 463 rejections`
+              )
+              if (consecutiveWhatsAppRejections >= MAX_CONSECUTIVE_REJECTIONS) {
+                await pauseCampaign(campaignId)
+                console.warn(`Campaign ${campaignId} hard-paused after WhatsApp 463 rejection; remaining pending rows are preserved`)
+                break
+              }
+            } else {
+              await updateStatus(campaignId, item.receiver, 'failed')
+              consecutiveWhatsAppRejections = 0
+            }
+          }
+        }
+      }
+  }
+
+  const startedImmediately = scheduleCampaignExecution(campaignId, processCampaign)
+
+  res.send({ status: 'in_progress', queued: !startedImmediately })
+}
+
+export { sendBlastMessage };

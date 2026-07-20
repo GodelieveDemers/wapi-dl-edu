@@ -1,0 +1,278 @@
+<x-layout-dashboard title="Channel WhatsApp">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb breadcrumb-custom-icon">
+            <li class="breadcrumb-item">
+                <a href="{{ route('home') }}">Dashboard</a>
+                <i class="breadcrumb-icon icon-base ti tabler-chevron-right align-middle icon-xs"></i>
+            </li>
+            <li class="breadcrumb-item active">Channel WhatsApp</li>
+        </ol>
+    </nav>
+
+    @if (session()->has('alert'))
+        <x-alert>
+            @slot('type', session('alert')['type'])
+            @slot('msg', session('alert')['msg'])
+        </x-alert>
+    @endif
+
+    @if ($errors->any())
+        <div class="alert alert-danger alert-dismissible" role="alert">
+            <strong>Data belum lengkap.</strong>
+            <ul class="mb-0 mt-2">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    <div class="row g-4 mb-4">
+        <div class="col-xl-4 col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="badge bg-label-success rounded p-3"><i class="ti tabler-brand-whatsapp icon-md"></i></span>
+                        <div>
+                            <h5 class="mb-1">WhatsApp Web / QR</h5>
+                            <p class="mb-0 text-muted">{{ $webDevices->count() }} device tersimpan</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4 col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="badge bg-label-primary rounded p-3"><i class="ti tabler-cloud icon-md"></i></span>
+                        <div>
+                            <h5 class="mb-1">Cloud API</h5>
+                            <p class="mb-0 text-muted">{{ $cloudChannels->count() }} channel resmi</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4 col-md-12">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h6 class="mb-2">Webhook Cloud API</h6>
+                    <code class="d-block small text-wrap">{{ route("meta-whatsapp.webhook.verify") }}</code>
+                    <p class="text-muted small mb-0 mt-2">Endpoint ini disiapkan untuk tahap webhook status dan pesan masuk.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header border-bottom">
+            <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-web" type="button" role="tab">
+                        <i class="ti tabler-qrcode me-1"></i> WhatsApp Web / QR
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-cloud" type="button" role="tab">
+                        <i class="ti tabler-cloud me-1"></i> WhatsApp Cloud API
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content p-0">
+                <div class="tab-pane fade show active" id="tab-web" role="tabpanel">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                            <h5 class="mb-1">Device WhatsApp Web</h5>
+                            <p class="text-muted mb-0">Nomor yang masih memakai scan QR/Baileys tetap tersedia di sini.</p>
+                        </div>
+                        <a class="btn btn-outline-primary" href="{{ route('devices') }}">
+                            <i class="ti tabler-settings me-1"></i> Kelola Device QR
+                        </a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Nomor</th>
+                                    <th>Status</th>
+                                    <th>Terkirim</th>
+                                    <th>Webhook</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($webDevices as $device)
+                                    <tr>
+                                        <td>{{ $device->body }}</td>
+                                        <td><span class="badge bg-{{ $device->status === 'Connected' ? 'success' : 'danger' }}">{{ $device->status }}</span></td>
+                                        <td>{{ $device->message_sent }}</td>
+                                        <td class="text-muted small">{{ $device->webhook ?: '-' }}</td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="4" class="text-center text-muted py-4">Belum ada device QR.</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="tab-cloud" role="tabpanel">
+                    <div class="row g-4">
+                        <div class="col-lg-5">
+                            <div class="border rounded p-4 h-100">
+                                <h5 class="mb-2">Embedded Signup Meta</h5>
+                                <p class="text-muted">User dapat menghubungkan WhatsApp Business Cloud API miliknya lewat popup resmi Meta.</p>
+                                <div class="mb-3">
+                                    <label class="form-label">Meta App ID</label>
+                                    <input class="form-control" value="{{ $embeddedSignup['app_id'] ?: 'Belum diisi' }}" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Configuration ID</label>
+                                    <input class="form-control" value="{{ $embeddedSignup['config_id'] ?: 'Belum diisi di .env META_EMBEDDED_SIGNUP_CONFIG_ID' }}" readonly>
+                                </div>
+                                @if ($embeddedSignup['config_id'])
+                                    <button type="button" id="connectMetaWhatsApp" class="btn btn-primary w-100">
+                                        <i class="ti tabler-brand-meta me-1"></i> Hubungkan dengan Meta
+                                    </button>
+                                @else
+                                    <button type="button" class="btn btn-secondary w-100" disabled>
+                                        Isi Configuration ID dahulu
+                                    </button>
+                                @endif
+                                <p class="text-muted small mt-3 mb-0">Setelah callback Meta aktif, WABA ID dan Phone Number ID akan disimpan otomatis ke channel user.</p>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="border rounded p-4 mb-4">
+                                <h5 class="mb-2">Tambah Manual Cloud API</h5>
+                                <p class="text-muted">Dipakai sambil menunggu Embedded Signup selesai review/config Meta.</p>
+                                <form action="{{ route('whatsapp.channels.cloud.store') }}" method="POST" class="row g-3">
+                                    @csrf
+                                    <div class="col-md-6">
+                                        <label class="form-label">Nama Channel</label>
+                                        <input name="name" class="form-control" placeholder="PMB Alma Ata Official" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Nama Bisnis</label>
+                                        <input name="business_name" class="form-control" placeholder="Universitas Alma Ata">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Nomor WhatsApp</label>
+                                        <input name="phone_number" class="form-control" placeholder="628xxxxxxxxxx" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Phone Number ID</label>
+                                        <input name="phone_number_id" class="form-control" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">WABA ID</label>
+                                        <input name="waba_id" class="form-control" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">App ID</label>
+                                        <input name="app_id" class="form-control" value="{{ $embeddedSignup['app_id'] }}">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Access Token</label>
+                                        <textarea name="access_token" class="form-control" rows="2" placeholder="Token disimpan terenkripsi"></textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">App Secret</label>
+                                        <input name="app_secret" type="password" class="form-control" placeholder="Opsional, disimpan terenkripsi">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Verify Token</label>
+                                        <input name="verify_token" class="form-control" placeholder="Opsional, auto-generate jika kosong">
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="1" name="is_default" id="isDefaultCloud">
+                                            <label class="form-check-label" for="isDefaultCloud">Jadikan channel Cloud API default</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <button class="btn btn-primary" type="submit"><i class="ti tabler-device-floppy me-1"></i> Simpan Channel</button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Channel</th>
+                                            <th>Nomor</th>
+                                            <th>WABA</th>
+                                            <th>Status</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse ($cloudChannels as $channel)
+                                            <tr>
+                                                <td>
+                                                    <strong>{{ $channel->name }}</strong>
+                                                    @if ($channel->is_default)
+                                                        <span class="badge bg-label-primary ms-1">Default</span>
+                                                    @endif
+                                                    <div class="text-muted small">Token: {{ $channel->masked_token }}</div>
+                                                </td>
+                                                <td>{{ $channel->phone_number }}</td>
+                                                <td class="small">{{ $channel->waba_id }}<br>{{ $channel->phone_number_id }}</td>
+                                                <td><span class="badge bg-label-info">{{ $channel->status }}</span></td>
+                                                <td class="text-end">
+                                                    <form action="{{ route('whatsapp.channels.cloud.destroy', $channel->id) }}" method="POST" onsubmit="return confirm('Putuskan channel ini?')">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button class="btn btn-sm btn-outline-danger" type="submit"><i class="ti tabler-trash"></i></button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr><td colspan="5" class="text-center text-muted py-4">Belum ada channel Cloud API.</td></tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if ($embeddedSignup['config_id'])
+        <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+        <script>
+            window.fbAsyncInit = function() {
+                FB.init({
+                    appId: '{{ $embeddedSignup['app_id'] }}',
+                    autoLogAppEvents: true,
+                    xfbml: true,
+                    version: '{{ $embeddedSignup['graph_version'] }}'
+                });
+            };
+
+            document.getElementById('connectMetaWhatsApp')?.addEventListener('click', function () {
+                FB.login(function (response) {
+                    fetch('{{ $embeddedSignup['callback_url'] }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({event: 'embedded_signup_response', response: response})
+                    }).then(() => window.location.reload());
+                }, {
+                    config_id: '{{ $embeddedSignup['config_id'] }}',
+                    response_type: 'code',
+                    override_default_response_type: true,
+                    extras: {setup: {}}
+                });
+            });
+        </script>
+    @endif
+</x-layout-dashboard>

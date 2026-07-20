@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panduan Integrasi WAPI dl-Edu WhatsApp Business Cloud API</title>
+  <style>
+    :root{--bg:#f6f8fb;--paper:#fff;--ink:#172033;--muted:#637083;--line:#d9e0ea;--brand:#4f46e5;--ok:#12805c;--warn:#9a6700;--bad:#b42318;--soft:#eef2ff;--code:#101828}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif;line-height:1.62} a{color:var(--brand)}
+    .layout{display:grid;grid-template-columns:300px 1fr;min-height:100vh}.side{position:sticky;top:0;height:100vh;overflow:auto;padding:24px;background:#111827;color:#e5e7eb}.side h1{font-size:20px;line-height:1.25;margin:0 0 8px}.side p{color:#aab4c3;font-size:13px;margin:0 0 18px}.side a{display:block;color:#dbe4ff;text-decoration:none;padding:8px 10px;border-radius:7px;font-size:14px}.side a:hover{background:#1f2937}.main{padding:32px 36px 80px}.paper{max-width:1080px;background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(16,24,40,.06);padding:34px}.hero{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:26px}.hero h2{font-size:30px;margin:0 0 8px}.hero p{margin:0;color:var(--muted)}
+    h2{font-size:25px;margin:34px 0 10px} h3{font-size:19px;margin:24px 0 8px} h4{font-size:16px;margin:18px 0 6px}.muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{border:1px solid var(--line);border-radius:10px;padding:16px;background:#fff}.card h3{margin-top:0}.badge{display:inline-block;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700}.ok{background:#e7f8ef;color:var(--ok)}.warn{background:#fff4d6;color:var(--warn)}.bad{background:#fee4e2;color:var(--bad)}.info{background:var(--soft);color:#3730a3}
+    pre{background:var(--code);color:#f8fafc;padding:16px;border-radius:10px;overflow:auto;font-size:13px;line-height:1.55} code{background:#eef2f7;color:#101828;border-radius:5px;padding:2px 5px} pre code{background:transparent;color:inherit;padding:0}.tocline{border-left:4px solid var(--brand);background:#f8f9ff;padding:12px 14px;border-radius:8px;margin:14px 0}.check li{margin:8px 0}.table{width:100%;border-collapse:collapse;margin:12px 0}.table th,.table td{border:1px solid var(--line);padding:9px;text-align:left;vertical-align:top}.table th{background:#f3f6fb}.step{counter-increment:step;border-left:3px solid var(--brand);padding:10px 0 10px 16px;margin:12px 0}.step:before{content:"Langkah " counter(step);display:inline-block;font-weight:700;color:var(--brand);margin-bottom:4px}.steps{counter-reset:step}.callout{border-radius:10px;padding:14px 16px;margin:14px 0}.callout.ok{background:#e7f8ef;color:#164b35}.callout.warn{background:#fff8e5;color:#5f4200}.callout.bad{background:#fff0ef;color:#7a271a}.footer{margin-top:34px;border-top:1px solid var(--line);padding-top:18px;color:var(--muted);font-size:13px}
+    @media(max-width:900px){.layout{display:block}.side{position:relative;height:auto}.main{padding:18px}.paper{padding:22px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <h1>WAPI dl-Edu</h1>
+    <p>Panduan integrasi WhatsApp Business Cloud API dan pendaftaran Meta.</p>
+    <a href="#ringkasan">Ringkasan</a>
+    <a href="#arsitektur">Arsitektur</a>
+    <a href="#pembangunan">Pembangunan Script</a>
+    <a href="#database">Database</a>
+    <a href="#env">Konfigurasi ENV</a>
+    <a href="#webhook">Webhook Meta</a>
+    <a href="#manual">Cloud API Manual</a>
+    <a href="#embedded">Embedded Signup</a>
+    <a href="#meta">Pendaftaran Meta</a>
+    <a href="#review">Review & Tech Provider</a>
+    <a href="#testing">Testing</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+    <a href="#checklist">Checklist Akhir</a>
+  </aside>
+  <main class="main">
+    <article class="paper">
+      <section class="hero" id="ringkasan">
+        <h2>Panduan Lengkap Pembangunan Integrasi WAPI dl-Edu</h2>
+        <p>Dari pembangunan script integrasi di Laravel, konfigurasi VPS, webhook, WhatsApp Cloud API, Embedded Signup, sampai pendaftaran dan pengajuan Meta/Facebook.</p>
+      </section>
+
+      <div class="grid">
+        <div class="card"><h3>Status Aplikasi</h3><span class="badge ok">Siap teknis</span><p class="muted">Route, database, webhook, dan halaman user sudah disiapkan.</p></div>
+        <div class="card"><h3>Cloud API Manual</h3><span class="badge ok">Bisa dipakai</span><p class="muted">User bisa menyimpan WABA ID, Phone Number ID, dan token manual.</p></div>
+        <div class="card"><h3>Embedded Signup</h3><span class="badge warn">Butuh approval</span><p class="muted">Meta mensyaratkan status BSP/Tech Provider untuk onboarding customer.</p></div>
+      </div>
+
+      <div class="tocline"><strong>Target akhir:</strong> user membuka menu <code>Devices</code>, memilih tab <code>WhatsApp Cloud API</code>, lalu dapat memakai Cloud API manual sekarang atau Embedded Signup setelah approval Meta selesai.</div>
+
+      <h2 id="arsitektur">1. Arsitektur Integrasi</h2>
+      <table class="table">
+        <tr><th>Komponen</th><th>Fungsi</th></tr>
+        <tr><td>Laravel app</td><td>Portal WAPI, dashboard user, penyimpanan channel WhatsApp, callback Meta, dan webhook.</td></tr>
+        <tr><td>WhatsApp Web / QR</td><td>Mode lama berbasis device QR/Baileys, tetap tersedia dalam tab <code>WhatsApp Web / QR</code>.</td></tr>
+        <tr><td>WhatsApp Cloud API</td><td>Mode resmi Meta menggunakan WABA ID, Phone Number ID, token, template, dan webhook.</td></tr>
+        <tr><td>Meta App</td><td>Aplikasi developer Meta yang menyediakan App ID, App Secret, Configuration ID, permission, dan review.</td></tr>
+        <tr><td>Webhook</td><td>Menerima verifikasi, pesan masuk, status pesan, dan event dari Meta.</td></tr>
+      </table>
+
+      <h2 id="pembangunan">2. Pembangunan Script Integrasi WAPI</h2>
+      <h3>2.1 Lokasi Project</h3>
+      <pre><code>/www/wwwroot/wapi.dl-edu.my.id</code></pre>
+
+      <h3>2.2 File Utama yang Dibangun</h3>
+      <table class="table">
+        <tr><th>File</th><th>Isi</th></tr>
+        <tr><td><code>app/Http/Controllers/WhatsAppChannelController.php</code></td><td>Halaman channel, simpan Cloud API manual, callback Embedded Signup, hapus channel.</td></tr>
+        <tr><td><code>app/Http/Controllers/Api/MetaWhatsAppWebhookController.php</code></td><td>Verifikasi webhook dan penerimaan webhook dari Meta.</td></tr>
+        <tr><td><code>app/Http/Controllers/MetaDataDeletionController.php</code></td><td>Callback penghapusan data untuk syarat review Meta.</td></tr>
+        <tr><td><code>resources/themes/vuexy/views/pages/whatsapp-channels/index.blade.php</code></td><td>UI gabungan WhatsApp Web / QR dan Cloud API.</td></tr>
+        <tr><td><code>resources/themes/vuexy/views/partials/devices-content.blade.php</code></td><td>Isi device QR lama yang dipakai ulang di halaman Devices dan tab WhatsApp Web / QR.</td></tr>
+        <tr><td><code>resources/themes/vuexy/views/pages/legal/*.blade.php</code></td><td>Privacy, Terms, dan status penghapusan data.</td></tr>
+      </table>
+
+      <h3>2.3 Alur Menu</h3>
+      <p>Menu sidebar tetap bernama <strong>Devices</strong>. Saat diklik, user masuk ke halaman gabungan baru yang memiliki dua tab:</p>
+      <ul>
+        <li><strong>WhatsApp Web / QR</strong>: fitur device QR lama yang lengkap.</li>
+        <li><strong>WhatsApp Cloud API</strong>: channel resmi Meta, Embedded Signup, dan input manual.</li>
+      </ul>
+
+      <h2 id="database">3. Database yang Dibutuhkan</h2>
+      <table class="table">
+        <tr><th>Tabel</th><th>Fungsi</th></tr>
+        <tr><td><code>whatsapp_cloud_channels</code></td><td>Menyimpan channel Cloud API per user.</td></tr>
+        <tr><td><code>whatsapp_embedded_signup_logs</code></td><td>Menyimpan log callback Embedded Signup.</td></tr>
+        <tr><td><code>whatsapp_cloud_webhook_logs</code></td><td>Menyimpan payload webhook Cloud API.</td></tr>
+        <tr><td><code>meta_data_deletion_requests</code></td><td>Menyimpan permintaan penghapusan data dari Meta.</td></tr>
+      </table>
+
+      <h3>3.1 Field Penting Channel Cloud API</h3>
+      <ul>
+        <li><code>user_id</code>: pemilik channel.</li>
+        <li><code>phone_number</code>: nomor WhatsApp.</li>
+        <li><code>phone_number_id</code>: ID nomor dari Meta.</li>
+        <li><code>waba_id</code>: WhatsApp Business Account ID.</li>
+        <li><code>access_token</code>: token terenkripsi.</li>
+        <li><code>verify_token</code>: token verifikasi webhook.</li>
+        <li><code>status</code>: manual, connected, embedded_pending_token, draft.</li>
+      </ul>
+
+      <h2 id="env">4. Konfigurasi ENV di VPS</h2>
+      <p>Konfigurasi disimpan di file:</p>
+      <pre><code>/www/wwwroot/wapi.dl-edu.my.id/.env</code></pre>
+      <p>Contoh konfigurasi yang digunakan:</p>
+      <pre><code>APP_URL=https://wapi.dl-edu.my.id
+META_EMBEDDED_SIGNUP_APP_ID=750615218079136
+META_EMBEDDED_SIGNUP_CONFIG_ID=1999076590997036
+META_WA_API_VERSION=v25.0
+META_WA_WEBHOOK_VERIFY_TOKEN=isi_token_random
+META_WA_APP_SECRET=isi_app_secret_meta
+META_EMBEDDED_SIGNUP_APP_SECRET=isi_app_secret_meta</code></pre>
+      <div class="callout bad"><strong>Jangan tampilkan ke user:</strong> App Secret, Access Token, dan token credential lain. App ID dan Configuration ID boleh dipakai di frontend, tetapi lebih rapi disembunyikan dan hanya tampil sebagai status.</div>
+
+      <h2 id="webhook">5. Webhook Meta</h2>
+      <h3>5.1 URL Webhook</h3>
+      <pre><code>https://wapi.dl-edu.my.id/meta-whatsapp/webhook</code></pre>
+      <h3>5.2 Isi di Dashboard Meta</h3>
+      <table class="table">
+        <tr><th>Field Meta</th><th>Nilai</th></tr>
+        <tr><td>URL Callback</td><td><code>https://wapi.dl-edu.my.id/meta-whatsapp/webhook</code></td></tr>
+        <tr><td>Verify Token</td><td>Isi sama dengan <code>META_WA_WEBHOOK_VERIFY_TOKEN</code> di server.</td></tr>
+      </table>
+      <h3>5.3 Test Webhook</h3>
+      <pre><code>curl "https://wapi.dl-edu.my.id/meta-whatsapp/webhook?hub.mode=subscribe&amp;hub.verify_token=VERIFY_TOKEN&amp;hub.challenge=12345"</code></pre>
+      <p>Jika benar, response harus mengembalikan:</p>
+      <pre><code>12345</code></pre>
+
+      <h2 id="manual">6. Cloud API Manual</h2>
+      <p>Mode manual digunakan sebelum Embedded Signup disetujui Meta. User mengambil data dari dashboard Meta lalu menyimpannya di aplikasi.</p>
+      <h3>6.1 Data yang Diinput User</h3>
+      <ul>
+        <li>Nama channel</li>
+        <li>Nama bisnis</li>
+        <li>Nomor WhatsApp</li>
+        <li>Phone Number ID</li>
+        <li>WABA ID</li>
+        <li>Access Token</li>
+        <li>Verify Token opsional</li>
+      </ul>
+      <h3>6.2 Sumber Data di Meta</h3>
+      <p>Buka <strong>WhatsApp &rarr; Penyiapan API</strong>. Di sana tersedia:</p>
+      <ul>
+        <li>Phone Number ID</li>
+        <li>WABA ID</li>
+        <li>Temporary access token atau token permanen jika sudah dibuat</li>
+      </ul>
+
+      <h2 id="embedded">7. Embedded Signup</h2>
+      <h3>7.1 Fungsi</h3>
+      <p>Embedded Signup memungkinkan customer menghubungkan WhatsApp Business Account miliknya melalui popup resmi Meta tanpa input manual WABA ID dan Phone Number ID.</p>
+      <h3>7.2 Alur Teknis</h3>
+      <div class="steps">
+        <div class="step">User klik <strong>Hubungkan dengan Meta</strong>.</div>
+        <div class="step">Aplikasi memanggil <code>FB.login()</code> dengan <code>config_id</code>.</div>
+        <div class="step">Meta membuka popup onboarding.</div>
+        <div class="step">Meta mengirim session info berisi WABA ID dan Phone Number ID.</div>
+        <div class="step">Aplikasi mengirim response ke callback Laravel.</div>
+        <div class="step">Laravel menyimpan channel ke <code>whatsapp_cloud_channels</code>.</div>
+        <div class="step">Jika ada <code>code</code> dan App Secret valid, Laravel menukar code ke access token.</div>
+      </div>
+      <h3>7.3 Batasan Penting</h3>
+      <div class="callout warn"><strong>Meta membatasi Embedded Signup:</strong> onboarding customer melalui Embedded Signup hanya tersedia untuk BSP atau Tech Provider. Jika belum disetujui, Meta menampilkan pesan bahwa aplikasi tidak tersedia untuk Embedded Signup.</div>
+
+      <h2 id="meta">8. Pendaftaran di Meta/Facebook dari Awal</h2>
+      <div class="steps">
+        <div class="step"><strong>Buat Business Portfolio</strong> di Meta Business Manager.</div>
+        <div class="step"><strong>Buat App Meta</strong> dengan jenis aplikasi Business.</div>
+        <div class="step"><strong>Tambahkan produk WhatsApp</strong> dan lakukan Penyiapan API.</div>
+        <div class="step"><strong>Tambahkan Facebook Login for Business</strong> untuk membuat konfigurasi login.</div>
+        <div class="step"><strong>Buat Configuration ID</strong> di Facebook Login for Business &rarr; Konfigurasi.</div>
+        <div class="step"><strong>Isi Domain Aplikasi</strong> dengan <code>wapi.dl-edu.my.id</code>.</div>
+        <div class="step"><strong>Isi Privacy, Terms, dan Data Deletion Callback</strong>.</div>
+        <div class="step"><strong>Aktifkan OAuth dan JavaScript SDK</strong>.</div>
+        <div class="step"><strong>Verifikasi bisnis</strong> jika diminta.</div>
+        <div class="step"><strong>Ajukan Advanced Access dan Tech Provider</strong>.</div>
+      </div>
+
+      <h3>8.1 Data Dasar Meta App</h3>
+      <table class="table">
+        <tr><th>Field</th><th>Nilai</th></tr>
+        <tr><td>App ID</td><td><code>750615218079136</code></td></tr>
+        <tr><td>Domain Aplikasi</td><td><code>wapi.dl-edu.my.id</code></td></tr>
+        <tr><td>Privacy Policy URL</td><td><code>https://wapi.dl-edu.my.id/en/privacy</code></td></tr>
+        <tr><td>Terms URL</td><td><code>https://wapi.dl-edu.my.id/en/terms</code></td></tr>
+        <tr><td>Data Deletion Callback</td><td><code>https://wapi.dl-edu.my.id/meta/data-deletion</code></td></tr>
+      </table>
+
+      <h3>8.2 OAuth dan JavaScript SDK</h3>
+      <p>Di <strong>Facebook Login for Business &rarr; Pengaturan</strong>, isi:</p>
+      <table class="table">
+        <tr><th>Pengaturan</th><th>Nilai</th></tr>
+        <tr><td>Masuk OAuth Klien</td><td>Ya</td></tr>
+        <tr><td>Masuk OAuth Web</td><td>Ya</td></tr>
+        <tr><td>Terapkan HTTPS</td><td>Ya</td></tr>
+        <tr><td>Login dengan SDK JavaScript</td><td>Ya</td></tr>
+        <tr><td>Domain JavaScript SDK</td><td><code>wapi.dl-edu.my.id</code></td></tr>
+      </table>
+      <p>Isi <strong>Redirect URI OAuth Valid</strong>:</p>
+      <pre><code>https://wapi.dl-edu.my.id/en/whatsapp-channels
+https://wapi.dl-edu.my.id/
+https://wapi.dl-edu.my.id/whatsapp-channels</code></pre>
+
+      <h2 id="review">9. Review Meta, Business Verification, dan Tech Provider</h2>
+      <h3>9.1 Permission yang Diajukan</h3>
+      <pre><code>business_management
+whatsapp_business_management
+whatsapp_business_messaging</code></pre>
+      <h3>9.2 Contoh Alasan Pengajuan</h3>
+      <pre><code>Aplikasi WAPI dl-Edu digunakan sebagai platform SaaS untuk membantu pelanggan menghubungkan WhatsApp Business Cloud API mereka, mengelola channel, webhook, template pesan, status pesan, dan pengiriman pesan sesuai kebijakan WhatsApp Business Platform. Permission business_management, whatsapp_business_management, dan whatsapp_business_messaging diperlukan agar pelanggan dapat melakukan onboarding WhatsApp Business Account melalui Embedded Signup dan agar aplikasi dapat mengelola Phone Number ID, WABA ID, webhook, serta pengiriman pesan yang diminta pengguna.</code></pre>
+      <h3>9.3 Instruksi Review</h3>
+      <pre><code>1. Buka https://wapi.dl-edu.my.id/en/login
+2. Login menggunakan akun demo reviewer.
+3. Buka menu Devices.
+4. Pilih tab WhatsApp Cloud API.
+5. Klik Hubungkan dengan Meta.
+6. Ikuti Embedded Signup untuk menghubungkan WhatsApp Business Account.
+7. Setelah selesai, aplikasi menyimpan WABA ID dan Phone Number ID ke channel pengguna.</code></pre>
+      <h3>9.4 Verifikasi Bisnis</h3>
+      <p>Jika perorangan, pilih <strong>Hak Milik Tunggal</strong>. Jika lembaga pendidikan, pilih <strong>Lembaga</strong> dan siapkan dokumen legal lembaga. Jika PT/CV, pilih jenis badan usaha sesuai dokumen.</p>
+      <ul>
+        <li>Nama legal harus sesuai dokumen.</li>
+        <li>Alamat harus sesuai bukti alamat.</li>
+        <li>Nomor telepon dan email harus aktif.</li>
+        <li>Business portfolio harus terverifikasi untuk akses lanjutan.</li>
+      </ul>
+
+      <h2 id="testing">10. Testing Setelah Konfigurasi</h2>
+      <h3>10.1 Test Halaman Legal</h3>
+      <pre><code>curl -I https://wapi.dl-edu.my.id/en/privacy
+curl -I https://wapi.dl-edu.my.id/en/terms
+curl -I https://wapi.dl-edu.my.id/en/meta/data-deletion</code></pre>
+      <p>Hasil yang benar: <code>HTTP/2 200</code>.</p>
+      <h3>10.2 Test Webhook</h3>
+      <pre><code>curl "https://wapi.dl-edu.my.id/meta-whatsapp/webhook?hub.mode=subscribe&amp;hub.verify_token=VERIFY_TOKEN&amp;hub.challenge=test"</code></pre>
+      <h3>10.3 Test UI</h3>
+      <ol>
+        <li>Login ke aplikasi.</li>
+        <li>Buka menu <strong>Devices</strong>.</li>
+        <li>Pastikan tab <strong>WhatsApp Web / QR</strong> menampilkan device lama lengkap.</li>
+        <li>Pastikan tab <strong>WhatsApp Cloud API</strong> menampilkan status Meta App, Embedded Signup, dan Webhook.</li>
+        <li>Klik <strong>Hubungkan dengan Meta</strong> setelah app Meta siap.</li>
+      </ol>
+
+      <h2 id="troubleshooting">11. Troubleshooting Error Meta</h2>
+      <table class="table">
+        <tr><th>Error</th><th>Penyebab</th><th>Solusi</th></tr>
+        <tr><td>Opsi JSSDK Tidak Diubah</td><td>Login dengan SDK JavaScript belum aktif.</td><td>Aktifkan <strong>Login dengan SDK JavaScript</strong> dan isi domain SDK.</td></tr>
+        <tr><td>Tidak Dapat Memuat URL</td><td>Domain atau redirect URI belum didaftarkan.</td><td>Isi Domain Aplikasi dan Redirect URI OAuth Valid.</td></tr>
+        <tr><td>Embedded signup is only available for BSPs or TPs</td><td>App belum menjadi BSP/Tech Provider.</td><td>Ajukan Tech Provider dan Advanced Access.</td></tr>
+        <tr><td>public_profile advanced access</td><td>Akses login perlu review/advanced access.</td><td>Ajukan akses di Tinjauan Aplikasi.</td></tr>
+        <tr><td>Token tidak otomatis tersimpan</td><td>App Secret belum ada atau Meta tidak mengirim code.</td><td>Isi App Secret dan ulangi signup dengan session valid.</td></tr>
+      </table>
+
+      <h2 id="checklist">12. Checklist Akhir</h2>
+      <ul class="check">
+        <li><span class="badge ok">OK</span> VPS memakai HTTPS dan domain aktif.</li>
+        <li><span class="badge ok">OK</span> App ID, Config ID, App Secret, dan Verify Token masuk ke <code>.env</code>.</li>
+        <li><span class="badge ok">OK</span> Webhook verify mengembalikan challenge.</li>
+        <li><span class="badge ok">OK</span> Privacy, Terms, dan Data Deletion Callback tersedia publik.</li>
+        <li><span class="badge ok">OK</span> Mode manual Cloud API tersedia untuk user.</li>
+        <li><span class="badge warn">Pending</span> Business Verification Meta.</li>
+        <li><span class="badge warn">Pending</span> Advanced Access permission WhatsApp.</li>
+        <li><span class="badge warn">Pending</span> Approval BSP/Tech Provider untuk Embedded Signup multi-user.</li>
+      </ul>
+
+      <div class="footer">
+        Dokumen dibuat untuk WAPI dl-Edu. Lokasi file: <code>/www/wwwroot/wapi.dl-edu.my.id/Panduan_wapi_dl-edu/panduan_wapi_businnes.html</code>. Terakhir diperbarui: 21 Mei 2026.
+      </div>
+    </article>
+  </main>
+</div>
+</body>
+</html>

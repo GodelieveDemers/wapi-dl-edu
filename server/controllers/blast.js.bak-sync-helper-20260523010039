@@ -1,0 +1,290 @@
+import { dbQuery } from '../database/index.js';
+import { formatReceipt } from '../lib/helper.js';
+import * as wa from '../whatsapp.js';
+
+const campaignQueues = new Map()
+
+const scheduleCampaignExecution = (campaignId, task) => {
+  const previous = campaignQueues.get(campaignId) ?? Promise.resolve()
+  const hasRunningJob = campaignQueues.has(campaignId)
+
+  const nextJob = previous
+    .catch(() => {})
+    .then(task)
+    .catch(error => {
+      console.error(`Failed to process campaign ${campaignId}:`, error)
+    })
+    .finally(() => {
+      if (campaignQueues.get(campaignId) === nextJob) {
+        campaignQueues.delete(campaignId)
+      }
+    })
+
+  campaignQueues.set(campaignId, nextJob)
+
+  return !hasRunningJob
+}
+
+const updateStatus = async (campaignId, receiver, status) => {
+  await dbQuery(
+    "UPDATE blasts SET status = '" +
+      status +
+      "' WHERE receiver = '" +
+      receiver +
+      "' AND campaign_id = '" +
+      campaignId +
+      "'"
+  )
+}
+
+const checkBlast = async (campaignId, receiver) => {
+  const result = await dbQuery(
+    "SELECT status FROM blasts WHERE receiver = '" +
+      receiver +
+      "' AND campaign_id = '" +
+      campaignId +
+      "'"
+  )
+  return result.length > 0 && result[0].status === 'pending'
+}
+
+
+const esc = value => String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+
+const extractBlastMessageText = item => {
+  try {
+    const parsed = JSON.parse(item.message)
+    if (typeof parsed === 'string') return parsed
+    if (parsed.text) return parsed.footer ? parsed.text + '\n\n> _' + parsed.footer + '_' : parsed.text
+    if (parsed.caption) return parsed.footer ? parsed.caption + '\n\n> _' + parsed.footer + '_' : parsed.caption
+    if (parsed.message) return parsed.message
+    return JSON.stringify(parsed)
+  } catch {
+    return String(item.message ?? '')
+  }
+}
+
+const syncOutgoingBlast = async (parsedData, item, status) => {
+  const devices = await dbQuery(
+    "SELECT id, user_id FROM devices WHERE body = '" + esc(parsedData.sender) + "' LIMIT 1"
+  )
+  if (!devices.length) return
+
+  const device = devices[0]
+  const messageText = extractBlastMessageText(item)
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
+  const phone = esc(item.receiver)
+  const body = esc(parsedData.sender)
+  const text = esc(messageText)
+  const type = esc(parsedData.type || 'text')
+
+  let sessions = await dbQuery(
+    "SELECT id FROM chat_sessions WHERE body = '" + body + "' AND phone_number = '" + phone + "' LIMIT 1"
+  )
+
+  if (!sessions.length) {
+    await dbQuery(
+      "INSERT INTO chat_sessions (user_id, body, phone_number, push_name, cs_name, last_message, last_seen_at, created_at, updated_at) VALUES ('" +
+        device.user_id + "', '" + body + "', '" + phone + "', '" + phone + "', '', '" + text + "', '" + now + "', '" + now + "', '" + now + "')"
+    )
+    sessions = await dbQuery(
+      "SELECT id FROM chat_sessions WHERE body = '" + body + "' AND phone_number = '" + phone + "' LIMIT 1"
+    )
+  }
+
+  if (sessions.length) {
+    const sessionId = sessions[0].id
+    await dbQuery(
+      "INSERT INTO chat_messages (session_id, number, direction, message, type, push_name, attachment, original_file, created_at, updated_at) VALUES ('" +
+        sessionId + "', '" + phone + "', 'outgoing', '" + text + "', '" + type + "', '', '', '', '" + now + "', '" + now + "')"
+    )
+    await dbQuery(
+      "UPDATE chat_sessions SET last_message = '" + text + "', last_seen_at = '" + now + "', updated_at = '" + now + "' WHERE id = '" + sessionId + "'"
+    )
+  }
+
+  await dbQuery(
+    "INSERT INTO message_histories (user_id, device_id, number, type, message, payload, status, send_by, note, created_at, updated_at) VALUES ('" +
+      device.user_id + "', '" + device.id + "', '" + phone + "', '" + type + "', '" + text + "', '{}', '" + esc(status) + "', 'web', 'campaign blast', '" + now + "', '" + now + "')"
+  )
+}
+
+const sendBlastMessage = async (req, res) => {
+  let parsedData
+
+  try {
+    parsedData = JSON.parse(req.body.data)
+  } catch (error) {
+    return res.status(400).send({ status: false, message: 'Invalid payload' })
+  }
+
+  const { campaign_id: campaignId, data: messageData } = parsedData || {}
+
+  if (!campaignId) {
+    return res.status(400).send({ status: false, message: 'Missing campaign identifier' })
+  }
+
+  if (!Array.isArray(messageData) || messageData.length === 0) {
+    return res.send({ status: 'in_progress', queued: false, processed: 0 })
+  }
+
+  const processCampaign = async () => {
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+    const parsedMinDelay = Number(parsedData.delay)
+    const minDelay = Number.isFinite(parsedMinDelay) ? Math.max(0, parsedMinDelay) : 0
+    const parsedMaxDelay = Number(parsedData.delay_max)
+    const maxDelay = Number.isFinite(parsedMaxDelay) ? Math.max(minDelay, parsedMaxDelay) : minDelay
+
+    for (let index = 0; index < messageData.length; index++) {
+      const item = messageData[index]
+
+      if (!item) {
+        continue
+      }
+
+      const shouldDelay = maxDelay > 0 || minDelay > 0
+      if (shouldDelay) {
+        const delayRange = maxDelay > minDelay ? maxDelay - minDelay + 1 : 1
+        const delaySec = maxDelay > minDelay
+          ? Math.floor(Math.random() * delayRange) + minDelay
+          : minDelay
+        if (delaySec > 0) {
+          await delay(delaySec * 1000)
+        }
+      }
+
+      if (!parsedData.sender || !item.receiver || !item.message) {
+        continue
+      }
+
+      const blastStillPending = await checkBlast(campaignId, item.receiver)
+      if (!blastStillPending) {
+        continue
+      }
+
+      try {
+        const exists = await wa.isExist(parsedData.sender, formatReceipt(item.receiver))
+        if (!exists) {
+          await updateStatus(campaignId, item.receiver, 'failed')
+          continue
+        }
+      } catch {
+        await updateStatus(campaignId, item.receiver, 'failed')
+        continue
+      }
+
+      try {
+        let sendResult
+
+        if (parsedData.type === 'media') {
+          const mediaMessage = JSON.parse(item.message)
+          if (mediaMessage.caption && mediaMessage.caption.trim() !== '') {
+            if (mediaMessage.footer && mediaMessage.footer.trim() !== '') {
+              mediaMessage.caption = `${mediaMessage.caption}\n\n> _${mediaMessage.footer}_`
+              delete mediaMessage.footer
+            }
+          } else if (mediaMessage.footer && mediaMessage.footer.trim() !== '') {
+            mediaMessage.caption = `> _${mediaMessage.footer}_`
+            delete mediaMessage.footer
+          }
+          sendResult = await wa.sendMedia(
+            parsedData.sender,
+            item.receiver,
+            mediaMessage.type,
+            mediaMessage.url,
+            mediaMessage.caption,
+            0,
+            mediaMessage.viewonce,
+            mediaMessage.filename
+          )
+        } else if (parsedData.type === 'sticker') {
+          const stickerMessage = JSON.parse(item.message)
+          sendResult = await wa.sendSticker(
+            parsedData.sender,
+            item.receiver,
+            stickerMessage.type,
+            stickerMessage.url,
+            stickerMessage.filename
+          )
+        } else if (parsedData.type === 'button') {
+          const buttonData = JSON.parse(item.message)
+          const buttons = buttonData.buttons.map(buttonRawData => {
+            const raw = buttonRawData.buttonText?.displayText || {}
+            return {
+              type: raw.type || 'reply',
+              displayText: raw.displayText,
+              id: buttonRawData.buttonId,
+              phoneNumber: raw.phoneNumber,
+              url: raw.url,
+              copyCode: raw.copyCode
+            }
+          })
+          sendResult = await wa.sendButtonMessage(
+            parsedData.sender,
+            item.receiver,
+            buttons,
+            buttonData.caption || buttonData.text || '',
+            buttonData.footer,
+            buttonData.image?.url
+          )
+        } else if (parsedData.type === 'list') {
+          const listData = JSON.parse(item.message)
+          sendResult = await wa.sendListMessage(
+            parsedData.sender,
+            item.receiver,
+            listData.sections,
+            listData.text || listData.caption || '',
+            listData.footer || '',
+            listData.title || '',
+            listData.buttonText || 'Select',
+            '',
+            listData.image?.url || null
+          )
+        } else {
+          const msg = JSON.parse(item.message)
+          if (msg.text && msg.footer && msg.text.trim() !== '') {
+            msg.text = wa.randomizeText(`${msg.text}\n\n> _${msg.footer}_`)
+            delete msg.footer
+          } else if (msg.text) {
+            msg.text = wa.randomizeText(msg.text)
+          }
+
+          if (msg.text && Object.keys(msg).every(key => ['text'].includes(key))) {
+            sendResult = await wa.sendText(
+              parsedData.sender,
+              item.receiver,
+              '',
+              msg.text
+            )
+          } else {
+            sendResult = await wa.sendMessage(
+              parsedData.sender,
+              item.receiver,
+              msg
+            )
+          }
+        }
+
+        const status = sendResult ? 'success' : 'failed'
+        await updateStatus(campaignId, item.receiver, status)
+        if (status === 'success') {
+          await syncOutgoingBlast(parsedData, item, status)
+        }
+      } catch (sendError) {
+        if (sendError?.message?.includes('503')) {
+          await delay(5000)
+          index--
+        } else {
+          await updateStatus(campaignId, item.receiver, 'failed')
+        }
+      }
+    }
+  }
+
+  const startedImmediately = scheduleCampaignExecution(campaignId, processCampaign)
+
+  res.send({ status: 'in_progress', queued: !startedImmediately })
+}
+
+export { sendBlastMessage };
