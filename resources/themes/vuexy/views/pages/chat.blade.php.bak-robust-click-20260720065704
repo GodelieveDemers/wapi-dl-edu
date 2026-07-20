@@ -29,31 +29,6 @@
 .chat-message-text .reply-chip{ margin: 0 0 .25rem 0; max-width:100%; }
 .chat-message-right .reply-action i {background-color: rgb(109, 107, 119);}
 .app-chat .app-chat-history .chat-history-body .chat-history .chat-message.chat-message-right .chat-message-text a { color:#fff; }
-#app-chat-conversation.force-hidden { display: none !important; }
-#app-chat-history.force-visible {
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  min-block-size: 520px;
-}
-#app-chat-history.force-visible .chat-history-wrapper {
-  display: flex !important;
-  flex-direction: column;
-  inline-size: 100%;
-  min-block-size: 520px;
-  visibility: visible !important;
-}
-#app-chat-history.force-visible .chat-history-header,
-#app-chat-history.force-visible .chat-history-footer {
-  display: block !important;
-  visibility: visible !important;
-}
-#app-chat-history.force-visible .chat-history-body {
-  display: block !important;
-  flex: 1 1 auto;
-  min-block-size: 320px;
-  visibility: visible !important;
-}
 </style>
 @if (!session()->has('selectedDevice'))
 		<div class="card shadow-sm border-0">
@@ -165,7 +140,6 @@
 				data-profile-receive="{{ $session->profile_receive ?? '' }}"
 				data-stop-ai="{{ $session->stop_ai ?? 0 }}"
 				data-cs-name="{{ $session->cs_name ?? '' }}"
-				data-last-message="{{ $session->last_message ?? '' }}"
 			  >
 				<a class="d-flex align-items-center">
 				  <div class="flex-shrink-0 avatar">
@@ -219,7 +193,7 @@
                    data-overlay
                    data-target="#app-chat-contacts"></i>
                 <div class="flex-shrink-0 avatar" data-bs-toggle="sidebar" data-overlay data-target="#app-chat-sidebar-right">
-                  <img src="{{ asset('img/avatars/1.png') }}" alt="{{ __('Avatar') }}" class="rounded-circle" />
+                  <img src="{{ asset('img/avatars/1.png') }}" alt="{{ __('Avatar') }}" class="rounded-circle" /></a>
                 </div>
                 <div class="chat-contact-info flex-grow-1 ms-4">
 				  <h6 class="m-0 fw-normal">{{ $currentContactName ?? __('Contact') }}</h6>
@@ -527,142 +501,5 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 <script type="module" src="{{ asset('js/emoji/picker.min.js') }}?v={{config('app.version')}}"></script>
 	<script src="{{ asset('js/app-chat.js') }}?v={{config('app.version')}}-livechat-sync-20260720d"></script>
-	<script>
-	document.addEventListener('DOMContentLoaded', function () {
-	  var chatList = document.getElementById('chat-list');
-	  var history = document.getElementById('app-chat-history');
-	  var conversation = document.getElementById('app-chat-conversation');
-	  var messagesList = document.getElementById('messages-list');
-	  var headerName = document.querySelector('.chat-history-header .fw-normal');
-	  var headerPhone = document.querySelector('.chat-history-header .user-status');
-	  var fetchUrl = "{{ route('chat.messages', ':id') }}";
-
-	  function escapeHtml(value) {
-	    return String(value || '')
-	      .replace(/&/g, '&amp;')
-	      .replace(/</g, '&lt;')
-	      .replace(/>/g, '&gt;');
-	  }
-
-	  function showHistory() {
-	    if (conversation) {
-	      conversation.classList.remove('d-flex', 'd-block', 'show', 'active');
-	      conversation.classList.add('d-none');
-	      conversation.classList.add('force-hidden');
-	      conversation.style.display = 'none';
-	    }
-	    if (history) {
-	      history.classList.remove('d-none');
-	      history.classList.add('d-block', 'force-visible');
-	      history.style.display = 'block';
-	      history.style.visibility = 'visible';
-	      history.style.opacity = '1';
-	      history.removeAttribute('aria-hidden');
-	    }
-	    var wrapper = history ? history.querySelector('.chat-history-wrapper') : null;
-	    if (wrapper) {
-	      wrapper.style.display = 'flex';
-	      wrapper.style.flexDirection = 'column';
-	      wrapper.style.visibility = 'visible';
-	    }
-	    var body = history ? history.querySelector('.chat-history-body') : null;
-	    if (body) {
-	      body.style.display = 'block';
-	      body.style.visibility = 'visible';
-	    }
-	  }
-
-	  function timeOf(value) {
-	    var d = value ? new Date(value) : new Date();
-	    if (isNaN(d.getTime())) d = new Date();
-	    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-	  }
-
-	  function typePreview(message) {
-	    if (!message) return '';
-	    if (message.type === 'image' && message.attachment) {
-	      return '<img src="' + escapeHtml(message.attachment) + '" style="max-width:250px;border-radius:8px">';
-	    }
-	    if (message.type === 'video' && message.attachment) {
-	      return '<video controls style="max-width:250px;border-radius:8px"><source src="' + escapeHtml(message.attachment) + '"></video>';
-	    }
-	    if ((message.type === 'document' || message.type === 'audio') && message.attachment) {
-	      return '<a href="' + escapeHtml(message.attachment) + '" target="_blank" rel="noopener">' + escapeHtml(message.original_file || message.type || 'File') + '</a>';
-	    }
-	    return '<p class="mb-0" style="white-space:break-spaces">' + escapeHtml(message.message || message.original_file || message.type || '') + '</p>';
-	  }
-
-	  function renderSimple(messages, fallbackText) {
-	    if (!messagesList) return;
-	    if (!Array.isArray(messages) || messages.length === 0) {
-	      var text = fallbackText || 'Belum ada riwayat pesan yang tersinkron.';
-	      messagesList.innerHTML =
-	        '<li class="text-center text-body-secondary py-2 small">Riwayat detail belum tersinkron, menampilkan pesan terakhir.</li>' +
-	        '<li class="chat-message"><div class="d-flex overflow-hidden"><div class="chat-message-wrapper flex-grow-1">' +
-	        '<div class="chat-message-text"><p class="mb-0" style="white-space:break-spaces">' + escapeHtml(text) + '</p></div>' +
-	        '<div class="text-body-secondary mt-1"><small>Sekarang</small></div></div></div></li>';
-	      return;
-	    }
-
-	    messagesList.innerHTML = messages.map(function (message) {
-	      var outgoing = message.direction === 'outgoing';
-	      return '<li class="chat-message ' + (outgoing ? 'chat-message-right' : '') + '">' +
-	        '<div class="d-flex overflow-hidden">' +
-	        '<div class="chat-message-wrapper flex-grow-1">' +
-	        '<div class="chat-message-text">' + typePreview(message) + '</div>' +
-	        '<div class="' + (outgoing ? 'text-end' : 'text-body-secondary') + ' mt-1"><small>' + timeOf(message.created_at) + '</small></div>' +
-	        '</div></div></li>';
-	    }).join('');
-	  }
-
-	  if (!chatList || chatList.dataset.robustClickBound === '1') return;
-	  chatList.dataset.robustClickBound = '1';
-	  var lastOpenSession = null;
-	  var lastOpenAt = 0;
-
-	  function openContact(item) {
-	    if (!item || item.classList.contains('chat-contact-list-item-title') || item.classList.contains('chat-list-item-0')) return;
-	    var sessionId = item.dataset.sessionId;
-	    var now = Date.now();
-	    if (sessionId && lastOpenSession === sessionId && now - lastOpenAt < 300) return;
-	    lastOpenSession = sessionId || null;
-	    lastOpenAt = now;
-	    var name = item.dataset.pushName || item.dataset.sessionPhone || 'Chat';
-	    var phone = item.dataset.sessionPhone || '';
-	    var fallback = item.dataset.lastMessage || (item.querySelector('.chat-contact-status') ? item.querySelector('.chat-contact-status').textContent.trim() : '');
-
-	    chatList.querySelectorAll('li.chat-contact-list-item').forEach(function (row) { row.classList.remove('active'); });
-	    item.classList.add('active');
-	    if (headerName) headerName.textContent = name;
-	    if (headerPhone) headerPhone.textContent = phone;
-	    showHistory();
-	    if (messagesList) messagesList.innerHTML = '<li class="text-center text-body-secondary py-4">Memuat chat...</li>';
-
-	    if (!sessionId) {
-	      renderSimple([], fallback);
-	      return;
-	    }
-
-	    fetch(fetchUrl.replace(':id', encodeURIComponent(sessionId)), { headers: { 'Accept': 'application/json' } })
-	      .then(function (response) { return response.ok ? response.json() : Promise.reject(); })
-	      .then(function (messages) { renderSimple(messages, fallback); })
-	      .catch(function () { renderSimple([], fallback || 'Gagal memuat isi chat.'); });
-	  }
-
-	  function contactFromEvent(event) {
-	    return event.target.closest('li.chat-contact-list-item');
-	  }
-
-	  chatList.addEventListener('pointerdown', function (event) {
-	    var item = contactFromEvent(event);
-	    if (item) openContact(item);
-	  }, true);
-
-	  chatList.addEventListener('click', function (event) {
-	    var item = contactFromEvent(event);
-	    if (item) openContact(item);
-	  }, true);
-	});
-	</script>
 @endif
 </x-layout-dashboard>

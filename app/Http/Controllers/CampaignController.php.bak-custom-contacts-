@@ -34,36 +34,19 @@ class CampaignController extends Controller
             return $q->where('name', 'like', '%' . $request->search . '%');
         })->withCount('contacts')->latest()->get();
 		
-        $contacts = $request->user()->contacts()->with('tag')->latest()->get();
-
-        return view('theme::pages.campaign.create', compact('phonebooks', 'contacts'));
+        return view('theme::pages.campaign.create', compact('phonebooks'));
     }
 
     public function store(Request $request, MessageService $messageService)
     {
         try {
             $device = $request->user()->devices()->find($request->device_id);
-            if (!$device || $device->status != 'Connected') {
+            $phonebook = $request->user()->phonebooks()->with('contacts')->find($request->phonebook_id);
+            if ($device->status != 'Connected') {
                 return response()->json(['error' => true, 'message' => __('Device is not connected,please scan the QR code to connect your device.')]);
             }
-
-            $destinationType = $request->input('destination_type', 'phonebook');
-            $contactsToSend = collect();
-
-            if ($destinationType === 'custom_contacts') {
-                $contactIds = (array) $request->input('contact_ids', []);
-                if (!empty($contactIds)) {
-                    $contactsToSend = $request->user()->contacts()->whereIn('id', $contactIds)->get();
-                }
-            } else {
-                $phonebook = $request->user()->phonebooks()->with('contacts')->find($request->phonebook_id);
-                if ($phonebook) {
-                    $contactsToSend = $phonebook->contacts;
-                }
-            }
-
-            if ($contactsToSend->count() == 0) {
-                return response()->json(['error' => true, 'message' => __('Nomor / Kontak tujuan tidak ditemukan. Silakan pilih kontak yang valid.')]);
+            if ($phonebook->contacts()->count() == 0) {
+                return response()->json(['error' => true, 'message' => __('Phonebook is empty, please add contact to phonebook.')]);
             }
 
             $template = null;
@@ -77,7 +60,8 @@ class CampaignController extends Controller
             $message = $messageService->format($request->type, (object) $request);
             $blasts = [];
 
-            foreach ($contactsToSend as $contact) {
+            foreach ($phonebook->contacts as $contact) {
+
                 try {
                     $newmsg = str_replace('{name}', $contact->name, $message);
                 } catch (\Throwable $th) {
@@ -104,9 +88,6 @@ class CampaignController extends Controller
 
             // db transaction
             Log::info($request->all());
-
-            $phonebookId = ($destinationType === 'phonebook') ? ($request->phonebook_id ?? 0) : 0;
-
             $campaign = $device->campaigns()->create([
                 'user_id' => $request->user()->id,
                 'name' => $request->campaign_name,
@@ -115,7 +96,7 @@ class CampaignController extends Controller
 				'delay_max' => $request->delay_max,
                 'status' => 'waiting',
                 'message' => json_encode($message),
-                'phonebook_id' => $phonebookId,
+                'phonebook_id' => $request->phonebook_id,
                 'schedule' => $request->tipe == 'schedule' 
 							? \Carbon\Carbon::parse($request->datetime, auth()->user()->timezone ?? config('app.timezone'))->setTimezone('UTC') 
 							: now(),
@@ -194,3 +175,4 @@ class CampaignController extends Controller
         return json_encode(['error' => false, 'msg' => __('Campaign deleted')]);
     }
 }
+?>

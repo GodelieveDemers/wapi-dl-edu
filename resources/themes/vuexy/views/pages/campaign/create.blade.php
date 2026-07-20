@@ -130,15 +130,62 @@
 							</div>
 						</div>
 						<div id="step-2" class="content">
-							<div class="mb-3 form-group">
-								<label class="form-label mb-2">{{ __('Select PhoneBook') }}</label>
-								<select id="phonebook_id" name="phonebook_id" class="form-select phonebook-option">
-									@foreach ($phonebooks as $phonebook)
-									<option value="{{ $phonebook->id }}">
-										{{ $phonebook->name }} ({{ $phonebook->contacts_count }} {{ __('Numbers') }})
-									</option>
-									@endforeach
-								</select>
+							<div class="mb-3 form-group card p-3 bg-body border shadow-none">
+								<label class="form-label mb-2 fw-bold text-primary"><i class="ti tabler-users icon-sm me-1"></i> {{ __('Tujuan Pesan (Destination)') }}</label>
+								<div class="row g-2 mb-3">
+									<div class="col-md-6">
+										<div class="form-check custom-option custom-option-basic">
+											<label class="form-check-label custom-option-content p-2 border rounded cursor-pointer d-flex align-items-center gap-2" for="dest_type_phonebook">
+												<input class="form-check-input mt-0" type="radio" name="destination_type" id="dest_type_phonebook" value="phonebook" checked>
+												<span>
+													<strong class="d-block text-body fs-6">{{ __('Grup / PhoneBook') }}</strong>
+													<small class="text-muted fs-tiny">{{ __('Kirim ke seluruh kontak dalam grup') }}</small>
+												</span>
+											</label>
+										</div>
+									</div>
+									<div class="col-md-6">
+										<div class="form-check custom-option custom-option-basic">
+											<label class="form-check-label custom-option-content p-2 border rounded cursor-pointer d-flex align-items-center gap-2" for="dest_type_custom">
+												<input class="form-check-input mt-0" type="radio" name="destination_type" id="dest_type_custom" value="custom_contacts">
+												<span>
+													<strong class="d-block text-body fs-6">{{ __('Pilih Kontak Spesifik') }}</strong>
+													<small class="text-muted fs-tiny">{{ __('Ketik nama / nomor HP tersimpan') }}</small>
+												</span>
+											</label>
+										</div>
+									</div>
+								</div>
+
+								<!-- Container 1: Select Phonebook (Searchable Dropdown) -->
+								<div id="container_phonebook_selection" class="destination-container">
+									<label class="form-label mb-1">{{ __('Select PhoneBook') }}</label>
+									<select id="phonebook_id" name="phonebook_id" class="selectpicker w-100" data-live-search="true" data-style="btn-outline-primary" data-dropup-auto="false" title="{{ __('Cari / Pilih PhoneBook...') }}">
+										@foreach ($phonebooks as $phonebook)
+										<option value="{{ $phonebook->id }}" data-tokens="{{ $phonebook->name }}">
+											{{ $phonebook->name }} ({{ $phonebook->contacts_count }} {{ __('Numbers') }})
+										</option>
+										@endforeach
+									</select>
+								</div>
+
+								<!-- Container 2: Select Specific Contacts (Searchable Multi-Select) -->
+								<div id="container_custom_contacts_selection" class="destination-container d-none">
+									<label class="form-label mb-1 d-flex justify-content-between align-items-center">
+										<span>{{ __('Pilih Nomor HP Tersimpan (Searchable)') }}</span>
+										<span class="badge bg-label-info" id="selected-contacts-count">0 kontak terpilih</span>
+									</label>
+									<select id="contact_ids" name="contact_ids[]" class="selectpicker w-100" multiple data-live-search="true" data-actions-box="true" data-style="btn-outline-success" data-dropup-auto="false" data-selected-text-format="count > 2" title="{{ __('Ketik nama atau nomor HP kontak tersimpan...') }}">
+										@if(isset($contacts) && count($contacts) > 0)
+											@foreach ($contacts as $contact)
+											<option value="{{ $contact->id }}" data-tokens="{{ strtolower($contact->name) }} {{ $contact->number }} {{ $contact->tag ? strtolower($contact->tag->name) : '' }}">
+												{{ $contact->name }} — {{ $contact->number }} {{ $contact->tag ? '('.$contact->tag->name.')' : '' }}
+											</option>
+											@endforeach
+										@endif
+									</select>
+									<small class="text-muted mt-1 d-block"><i class="ti tabler-info-circle icon-xs me-1"></i> {{ __('Ketikkan nama atau nomor HP pada pencarian di atas untuk memfilter kontak secara instan.') }}</small>
+								</div>
 							</div>
 							<div class="form-group">
 								<label class="form-label">{{__('Message Source')}}</label>
@@ -273,6 +320,27 @@
 			
 			// Load templates on page load
 			loadTemplates();
+			
+			// Handle destination type switch (PhoneBook vs Custom Contacts)
+			document.querySelectorAll('input[name="destination_type"]').forEach(radio => {
+				radio.addEventListener('change', function() {
+					const isCustom = this.value === 'custom_contacts';
+					document.getElementById('container_phonebook_selection').classList.toggle('d-none', isCustom);
+					document.getElementById('container_custom_contacts_selection').classList.toggle('d-none', !isCustom);
+					if (typeof $ !== 'undefined' && $.fn.selectpicker) {
+						$('#phonebook_id').selectpicker('refresh');
+						$('#contact_ids').selectpicker('refresh');
+					}
+				});
+			});
+
+			if (typeof $ !== 'undefined') {
+				$(document).on('changed.bs.select', '#contact_ids', function () {
+					const selectedCount = $(this).val() ? $(this).val().length : 0;
+					const countEl = document.getElementById('selected-contacts-count');
+					if (countEl) countEl.textContent = selectedCount + ' kontak terpilih';
+				});
+			}
 			
 			// Handle message source change
 			document.querySelectorAll('input[name="message_source"]').forEach(radio => {
@@ -959,10 +1027,33 @@
 					if (i === 0) {
 						fv1.validate().then(r => r === 'Valid' && stepper.next());
 					} else if (i === 1) {
-						fv2.validate().then(r => {
-							if (r !== 'Valid') return;
-							const t = document.getElementById('type').value;
-							let ok = true;
+						const destType = document.querySelector('input[name="destination_type"]:checked')?.value || 'phonebook';
+						if (destType === 'phonebook') {
+							const pb = document.getElementById('phonebook_id').value;
+							if (!pb) {
+								notyf.error('{{ __("Please select a PhoneBook") }}');
+								return;
+							}
+						} else if (destType === 'custom_contacts') {
+							const contacts = $('#contact_ids').val();
+							if (!contacts || contacts.length === 0) {
+								notyf.error('{{ __("Silakan pilih minimal 1 kontak tujuan.") }}');
+								return;
+							}
+						}
+
+						const t = document.getElementById('type').value;
+						const isTemplate = document.querySelector('input[name="message_source"]:checked')?.value === 'template';
+						if (!t && !isTemplate) {
+							notyf.error('{{ __("Please select Message Type.") }}');
+							return;
+						}
+
+						let ok = true;
+						if (isTemplate) {
+							ok = !!document.getElementById('template_id').value;
+							if (!ok) notyf.error('{{ __("Please select a template.") }}');
+						} else {
 							if (t === 'text') ok = requiredInput('message');
 							else if (t === 'location') ok = requiredInput('latitude');
 							else if (t === 'vcard') ok = requiredInput('phone');
@@ -974,9 +1065,9 @@
 								   requiredInput('name') && 
 								   checkMultipleForm('sections');
 							}
-							if (ok) stepper.next();
-							else notyf.error('{{ __("Please fill all required fields.") }}');
-						});
+							if (!ok) notyf.error('{{ __("Please fill all required fields.") }}');
+						}
+						if (ok) stepper.next();
 					}
 				});
 			});
@@ -1016,6 +1107,18 @@
 
 							formData.append(el.name, el.value);
 						  });
+					}
+					
+					const destType = document.querySelector('input[name="destination_type"]:checked')?.value || 'phonebook';
+					formData.set('destination_type', destType);
+
+					if (destType === 'phonebook') {
+						formData.set('phonebook_id', document.getElementById('phonebook_id').value);
+					} else {
+						const selectedContacts = $('#contact_ids').val() || [];
+						selectedContacts.forEach(id => {
+							formData.append('contact_ids[]', id);
+						});
 					}
 					
 					const msgSrc = document.querySelector('input[name="message_source"]:checked');
